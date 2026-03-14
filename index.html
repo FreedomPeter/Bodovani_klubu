@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bodování klubů MČR mládeže</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="jspdf.umd.min.js"></script>
+<script src="jspdf.autotable.min.js"></script>
+<script src="pdf-fonts.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0d14;
+  --surface: #12151f;
+  --surface2: #1a1e2e;
+  --border: #252a3d;
+  --accent: #4f7cff;
+  --accent2: #7c4fff;
+  --gold: #ffd700;
+  --silver: #c0c0c0;
+  --bronze: #cd7f32;
+  --text: #e8ecf4;
+  --muted: #6b7399;
+  --success: #22c55e;
+  --row-hover: rgba(79,124,255,0.07);
+}
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+header {
+  background: linear-gradient(135deg, #0f1320 0%, #1a1e2e 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 24px 40px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.logo {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+header h1 { font-size: 1.4rem; font-weight: 700; }
+header p { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+main { max-width: 1400px; margin: 0 auto; padding: 40px; }
+
+/* Upload */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 20px;
+  padding: 60px 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: var(--surface);
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(79,124,255,0.05);
+  transform: translateY(-2px);
+}
+.upload-icon { font-size: 3rem; margin-bottom: 16px; }
+.upload-zone h2 { font-size: 1.3rem; font-weight: 600; margin-bottom: 8px; }
+.upload-zone p { color: var(--muted); font-size: 0.9rem; }
+.upload-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 10px; border: none;
+  font-family: inherit; font-size: 0.875rem; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.btn-upload { margin-top: 20px; }
+
+/* Status */
+#statusBox {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-top: 24px;
+}
+.status-item { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-size: 0.875rem; color: var(--muted); }
+.status-item.done { color: var(--success); }
+.status-item.active { color: var(--accent); }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Results */
+#resultsSection { display: none; margin-top: 32px; }
+.results-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px; flex-wrap: gap;
+}
+.results-title h2 { font-size: 1.3rem; font-weight: 700; }
+.results-title p { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
+.export-btns { display: flex; gap: 10px; }
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+thead th {
+  background: var(--surface2);
+  padding: 12px 10px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+thead th:nth-child(2) { text-align: left; padding-left: 16px; }
+tbody tr { border-bottom: 1px solid rgba(37,42,61,0.5); transition: background 0.15s; }
+tbody tr:hover { background: var(--row-hover); }
+tbody td { padding: 10px 10px; text-align: center; }
+tbody td:nth-child(2) { text-align: left; padding-left: 16px; font-weight: 500; }
+tbody td:nth-child(3) { font-size: 0.75rem; color: var(--muted); }
+.rank-cell { font-weight: 700; font-size: 0.9rem; width: 40px; }
+.points-cell { font-weight: 700; font-size: 0.95rem; color: var(--accent); }
+.count-cell { color: var(--text); opacity: 0.8; }
+.zero-cell { color: var(--border); }
+
+/* Medal rows */
+tbody tr.rank-1 { background: rgba(255,215,0,0.07); }
+tbody tr.rank-2 { background: rgba(192,192,192,0.06); }
+tbody tr.rank-3 { background: rgba(205,127,50,0.07); }
+tbody tr.rank-1 .rank-cell { color: var(--gold); }
+tbody tr.rank-2 .rank-cell { color: var(--silver); }
+tbody tr.rank-3 .rank-cell { color: var(--bronze); }
+
+/* Summary stats */
+.stats-row {
+  display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  flex: 1; min-width: 140px;
+}
+.stat-card .val { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+.stat-card .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+/* Error */
+#errorBox {
+  display: none;
+  background: rgba(220,38,38,0.1);
+  border: 1px solid rgba(220,38,38,0.3);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: #fca5a5;
+  margin-top: 16px;
+  font-size: 0.875rem;
+}
+
+/* Category tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; }
+.tab { padding: 7px 18px; border-radius: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--muted); }
+.tab.active { background: var(--accent); color: #fff; }
+
+/* Report title input */
+.report-title-bar {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 16px; margin-bottom: 16px;
+}
+.report-title-bar label { font-size: 0.78rem; color: var(--muted); white-space: nowrap; font-weight: 600; }
+.report-title-bar input {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 12px; color: var(--text);
+  font-family: inherit; font-size: 0.875rem; outline: none;
+  transition: border-color 0.2s;
+}
+.report-title-bar input:focus { border-color: var(--accent); }
+
+footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏅</div>
+  <div>
+    <h1>Bodování klubů MČR mládeže</h1>
+    <p>Automatické zpracování výsledků z atletika.cz</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="upload-icon">📂</div>
+    <h2>Nahrajte soubor s výsledky</h2>
+    <p>Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr</p>
+    <button class="btn btn-primary btn-upload" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+      Vybrat soubor
+    </button>
+  </div>
+
+  <!-- Error -->
+  <div id="errorBox"></div>
+
+  <!-- Status -->
+  <div id="statusBox">
+    <div class="status-item" id="s1">⏳ Načítám soubor…</div>
+    <div class="status-item" id="s2">⏳ Filtruji kombinované disciplíny…</div>
+    <div class="status-item" id="s3">⏳ Zpracovávám výsledky disciplín…</div>
+    <div class="status-item" id="s4">⏳ Počítám body…</div>
+    <div class="status-item" id="s5">⏳ Sestavuji tabulku…</div>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsSection">
+    <!-- Report title input -->
+    <div class="report-title-bar">
+      <label for="reportTitleInput">Název reportu:</label>
+      <input id="reportTitleInput" type="text"
+        placeholder="např. Bodování klubů HMČR mládežnických kategorií 2026"
+        value="Bodování klubů MČR mládežnických kategorií">
+    </div>
+
+    <div class="results-header">
+      <div class="results-title">
+        <h2 id="resultsTitle">Bodování klubů</h2>
+        <p id="resultsSubtitle"></p>
+      </div>
+      <div class="export-btns">
+        <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
+        <button class="btn btn-outline" onclick="exportPDF('table')">📄 Export klubové bodování</button>
+        <button class="btn btn-outline" onclick="exportPDF('kas')">🗺 Export KAS souhrn</button>
+        <button class="btn btn-primary" onclick="exportPDF('full')">📋 Export kompletní report</button>
+      </div>
+    </div>
+
+    <div class="stats-row" id="statsRow"></div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-cat="all" onclick="switchTab(this)">Celkem</div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th>Poř.</th>
+            <th style="text-align:left;padding-left:16px">AO / AK</th>
+            <th>Kraj</th>
+            <th>1.</th><th>2.</th><th>3.</th><th>4.</th><th>5.</th><th>6.</th><th>7.</th><th>8.</th>
+            <th>Finálových umístění</th>
+            <th>Body</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+<footer>Bodování klubů MČR mládeže · Automaticky generováno</footer>
+
+<script>
+// ─── KAS MAP ────────────────────────────────────────────────────────────────
+const KAS_MAP = {
+  "AK ŠKODA Plzeň":"Plzeňský","TJ Sokol Hradec Králové":"Královéhradecký",
+  "Univerzitní sportovní klub Praha":"Pražský","TJ Sokol Kolín-atletika":"Středočeský",
+  "A. C. TEPO Kladno":"Středočeský","Atletický klub Olomouc z.s.":"Olomoucký",
+  "TJ Dukla Praha":"Pražský","SK Jeseniova":"Pražský",
+  "T. J. Sokol České Budějovice":"Jihočeský","ASK Dipoli z.s.":"Středočeský",
+  "AK Olymp Brno, spolek":"Jihomoravský","TJ Sokol Opava":"Moravskoslezský",
+  "Atletický klub Ludvíka Daňka Blansko, z.s.":"Jihomoravský",
+  "TJ Spartak Třebíč, spolek":"Vysočina","Lokomotiva FOSFA Břeclav":"Jihomoravský",
+  "PSK Olymp Praha, z.s.":"Pražský","TJ Spartak Čelákovice,z.s.":"Středočeský",
+  "SK Nové Město nad Metují":"Královéhradecký","VSK Univerzita Brno":"Jihomoravský",
+  "Atletika Jižní Město z.s.":"Pražský","AC Moravská Slavia Brno, spolek":"Jihomoravský",
+  "AK Slovan Duchcov":"Ústecký","Hvězda Pardubice z.s.":"Pardubický",
+  "SSK Vítkovice, z.s.":"Moravskoslezský","TJ LIAZ Jablonec n/N., z.s.":"Liberecký",
+  "Atletika Chrudim, z.s.":"Pardubický","Spartak Praha 4":"Pražský",
+  "ASK Slavia Praha":"Pražský","Atletický klub Zlín, z.s.":"Zlínský",
+  "TJ VS Tábor, z. s.":"Jihočeský","AC Slovan Liberec, z.s.":"Liberecký",
+  "AC Mladá Boleslav z.s.":"Liberecký","Atletika Nový Jičín z. s.":"Moravskoslezský",
+  "Atletika Stará Boleslav, z.s.":"Středočeský","TJ TŽ Třinec":"Moravskoslezský",
+  "Atletika Jihlava z.s.":"Vysočina","Atletika Poruba z.s.":"Moravskoslezský",
+  "TJ Lokomotiva Beroun z.s.":"Středočeský","TJ Sokol Velké Meziříčí":"Vysočina",
+  "AK Most":"Ústecký","SKP Nymburk, z.s.":"Středočeský","AC Turnov, z. s.":"Liberecký",
+  "Atletika Holešov, z.s.":"Zlínský","TJ Jiskra Litomyšl":"Pardubický",
+  "ASK Lovosice":"Ústecký","TJ Lokomotiva Trutnov, z.s.":"Královéhradecký",
+  "TJ Šumperk, z.s.":"Olomoucký","TJ Jiskra Ústí nad Orlicí, z.s.":"Pardubický",
+  "Atletika Benešov z.s.":"Středočeský","TRIATLET Karlovy Vary z.s.":"Karlovarský",
+  "Orel Vyškov":"Jihomoravský","AC Pardubice":"Pardubický","SC Radotín Praha":"Pražský",
+  "SK Sokol Zlatníky, z.s.":"Středočeský","SK Sporting Příbram, z.s.":"Středočeský",
+  "Sportovní kluby Spartak Slatiňany, z.s.":"Pardubický",
+  "AC Slovácká Slavia Uherské Hradiště":"Zlínský","AC Čáslav z.s.":"Středočeský",
+  "Atletický klub ISCAREX Česká Třebová, z.s.":"Pardubický",
+  "Atletika Slavkov u Brna, z.s.":"Jihomoravský","Atletika Vlašim, z.s.":"Středočeský",
+  "TJ Klášterec nad Ohří, z.s.":"Ústecký","USK PROVOD Ústí n/L.":"Ústecký",
+  "Atletický klub Bohumín, z.s.":"Moravskoslezský","Atletika Havířov 1965":"Moravskoslezský",
+  "TJ Sokol SG Plzeň-Petřín":"Plzeňský","AC Jablonec nad Nisou, z. s.":"Liberecký",
+  "AC Domažlice, z. s.":"Plzeňský","AK Bílina":"Ústecký",
+  "SC Start Karlovy Vary":"Karlovarský","SKP Union Cheb z.s.":"Karlovarský",
+  "TJ Dlouhá Třebová, z.s.":"Pardubický","AC Rumburk, z.s.":"Ústecký",
+  "KORELA SPORTS TEAM z. s.":"Vysočina","TJ Jiskra Otrokovice":"Zlínský",
+  "TJ Neratovice":"Středočeský","Atletický klub Hošťálkovice, z. s.":"Moravskoslezský",
+  "Athletic club Mariánské Lázně, z.s.":"Karlovarský",
+  "Atletický klub AHA Vyškov, z. s.":"Jihomoravský","MÍLAŘI Domažlice":"Plzeňský",
+  "SK Aktis Praha z.s.":"Pražský","SK Kotlářka Praha, z.s.":"Pražský",
+  "Školní atletický klub Slaný":"Středočeský","AC Vysoké Mýto z.s.":"Pardubický",
+  "Atletický klub Louny, z.s.":"Ústecký","TJ Jiskra Humpolec":"Vysočina",
+  "TJ Slezan Opava, z.s.":"Moravskoslezský",
+  "Atletický oddíl - STŘELA Žebrák, z.s.":"Středočeský",
+  "TJ Baník Stříbro, spolek":"Plzeňský",
+  "AC Sportguides Rožnov pod Radhoštěm z.s.":"Zlínský","AK Kroměříž":"Zlínský",
+  "AK Sokol Nehvizdy":"Středočeský","ASK ELNA Počerady":"Ústecký",
+  "Atletický klub Krupka, z.s.":"Ústecký","TJ Nové Město na Moravě z.s.":"Vysočina",
+  "Atletický klub Šternberk z.s.":"Olomoucký","TJ Slavoj BANES Pacov":"Vysočina",
+  "TJ VTŽ CHOMUTOV,z.s.":"Ústecký","TJ Svitavy, z. s.":"Pardubický",
+  "Atletický klub Emila Zátopka Kopřivnice":"Moravskoslezský","JAC Brno":"Jihomoravský",
+  "TJ Sokol Praha Královské Vinohrady":"Pražský",
+  "Tělovýchovná jednota Slezan Frýdek-Místek, z.s.":"Moravskoslezský",
+  "Atletický klub Hodonín,z.s.":"Jihomoravský",
+  "SK Čtyři Dvory České Budějovice":"Jihočeský","TJ Nová Včelnice, z.s.":"Jihočeský",
+  "Atletika Klatovy z.s.":"Plzeňský","TJ Znojmo, z.s.":"Jihomoravský",
+  "Athletic Club Ústí n/L. z.s.":"Ústecký",
+  "Sportovní klub Přerov 1908 z.s.":"Olomoucký","TJ Sokol Milevsko":"Jihočeský",
+  "AC Čejkovice":"Jihomoravský","AC TJ Jičín, z. s.":"Liberecký",
+  "SK Hranice, z.s.":"Olomoucký","TJ Jiskra Havlíčkův Brod":"Vysočina",
+  "A. C. Sparta Praha":"Pražský","Atletika Stodůlky, z.s.":"Pražský",
+  "TJ Slavoj Český Brod, z.s.":"Středočeský","Fénix sport Blansko":"Jihomoravský",
+  "SK ANTE Žďár nad Sázavou":"Vysočina","TJ Spartak Hořovice":"Středočeský",
+  "Atletický klub Sokolov, spolek":"Karlovarský",
+  "Aktiv Sport Horšovský Týn, z.s.":"Plzeňský","ATLETIKA Polička, spolek":"Pardubický",
+  "TJ Jiskra Nový Bor":"Liberecký","ROAD2KONA":"Pražský",
+  "Atletika Ostrov, z.s.":"Karlovarský","Atletický klub Kuřim, z.s.":"Jihomoravský",
+  "TJ Jiskra Zruč nad Sázavou z.s.":"Středočeský","TJ Sušice, z.s.":"Plzeňský",
+  "TJ Lokomotiva Veselí nad Lužnicí z.s.":"Jihočeský",
+  "Atletika Čelákovice z.s.":"Středočeský",
+  "Tělocvičná jednota Sokol I. Smíchov":"Pražský",
+  "TJ Velká nad Veličkou":"Jihomoravský","SK Vrchlabí, z. s.":"Královéhradecký",
+  "Atletický klub Prostějov, z. s.":"Olomoucký",
+  "Sportovní klub LS Kladno, z. s.":"Středočeský",
+  "TJ Jäkl Karviná, z. s.":"Moravskoslezský",
+  "AC TRACK & FIELD Brno z.s.":"Jihomoravský",
+  "Atletika Vlašim z.s.":"Středočeský"
+};
+
+// ─── POINTS TABLE ───────────────────────────────────────────────────────────
+const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
+
+// ─── GLOBALS ────────────────────────────────────────────────────────────────
+let allResults = []; // {discipline, gender, place, club, category}
+let currentCat = 'all';
+
+// ─── UI HELPERS ─────────────────────────────────────────────────────────────
+function setStatus(n, state) {
+  const el = document.getElementById('s'+n);
+  const icons = {done:'✅',active:'🔄',pending:'⏳'};
+  const labels = ['','Načítám soubor…','Filtruji kombinované disciplíny…','Zpracovávám výsledky disciplín…','Počítám body…','Sestavuji tabulku…'];
+  el.className = 'status-item ' + (state==='done'?'done':state==='active'?'active':'');
+  el.textContent = icons[state] + ' ' + labels[n];
+}
+function showError(msg) {
+  const el = document.getElementById('errorBox');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+}
+
+// ─── TIME PARSING ────────────────────────────────────────────────────────────
+function parseTime(s) {
+  if (!s || typeof s !== 'string') return null;
+  s = s.trim();
+  if (['DNS','DQ','DNF','MS','DQ*','NM','NH','PS'].includes(s.toUpperCase())) return null;
+  // h:mm:ss.ss or mm:ss.ss or ss.ss
+  const parts = s.split(':');
+  if (parts.length === 3) return +parts[0]*3600 + +parts[1]*60 + +parts[2];
+  if (parts.length === 2) return +parts[0]*60 + +parts[1];
+  return parseFloat(s) || null;
+}
+
+// parse numeric placing (strips =, trailing =)
+function parsePlacard(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim().replace(/=/g,'');
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+
+function isNonFinish(v) {
+  if (v === null || v === undefined) return false;
+  return ['DNS','DQ','DNF','MS','DQ*','NM','NH','PS'].includes(String(v).trim().toUpperCase());
+}
+
+// ─── CORE PROCESSING ────────────────────────────────────────────────────────
+
+function processFile(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {defval:null});
+
+  // Normalise column names (trim whitespace)
+  const rows = raw.map(r => {
+    const o = {};
+    for (const k of Object.keys(r)) o[k.trim()] = r[k];
+    return o;
+  });
+
+  setStatus(2,'active');
+
+  // 1. Remove combined-event sub-discipline rows (Body column has a numeric value > 0)
+  //    Keep sedmiboj/pětiboj overall result rows (Body is null)
+  const filtered = rows.filter(r => {
+    const body = r['Body'];
+    // Filter out rows where Body is a real numeric value (combined-event sub-disciplines)
+    // Must check body is not null/empty/whitespace first — Number(null)==0 and Number('')==0, both not NaN
+    if (body !== null && body !== undefined && String(body).trim() !== '' && !isNaN(Number(body))) return false;
+    return true;
+  });
+
+  setStatus(2,'done'); setStatus(3,'active');
+
+  // 2. Group by discipline key (Disciplína) and Fáze
+  // Build unique discipline list
+  const discSet = [...new Set(filtered.map(r => r['Disciplína']))].filter(Boolean);
+
+  allResults = [];
+
+  for (const disc of discSet) {
+    const discRows = filtered.filter(r => r['Disciplína'] === disc);
+    const finalRows = processDiscipine(disc, discRows);
+    allResults.push(...finalRows);
+  }
+
+  setStatus(3,'done'); setStatus(4,'active');
+  setStatus(4,'done'); setStatus(5,'active');
+}
+
+function getPhaseType(faze) {
+  if (!faze) return 'none'; // no phase = direct result
+  const f = faze.trim();
+  if (f.startsWith('Finále 1') || f.startsWith('Finále 2')) return 'double_final';
+  if (f.startsWith('Finále')) return 'final';
+  if (f.startsWith('Rozběh') || f.startsWith('Rozběh')) return 'heat';
+  if (f.startsWith('Běh')) return 'beh'; // relay / short-final heats
+  return 'other';
+}
+
+// Returns array of {disc, club, kraj, place, points}
+function processDiscipine(disc, rows) {
+  // Build a quick category label from discipline name (Muži/Ženy)
+  let gender = 'Muži';
+  if (disc.toLowerCase().includes('ženy') || disc.toLowerCase().includes('žen')) gender = 'Ženy';
+
+  const phases = [...new Set(rows.map(r => r['Fáze']))];
+  const phaseTypes = phases.map(p => getPhaseType(p));
+
+  const hasDoubleFinal = phaseTypes.some(t => t === 'double_final');
+  const hasFinal = phaseTypes.some(t => t === 'final');
+  const hasHeats = phaseTypes.some(t => t === 'heat');
+  const hasBeh = phaseTypes.some(t => t === 'beh');
+  const hasNone = phaseTypes.some(t => t === 'none');
+
+  let finalAthletes = []; // {club, place (numeric), výkon}
+
+  if (hasNone && !hasFinal && !hasDoubleFinal && !hasBeh) {
+    // Direct results (field events, combined events, middle distance)
+    finalAthletes = rows
+      .filter(r => r['Pořadí'] !== null && r['Pořadí'] !== undefined)
+      .map(r => ({
+        club: r['Oddíl/stát'],
+        place: parsePlacard(r['Pořadí']),
+        výkon: r['Výkon'],
+        nonFinish: isNonFinish(r['Pořadí']) || isNonFinish(r['Výkon']),
+        phase: 'direct'
+      }));
+  } else if (hasDoubleFinal) {
+    // 400m: two finals → combine & re-rank by time
+    finalAthletes = buildDoubleFinalRanking(rows);
+  } else if (hasBeh && !hasFinal) {
+    // Relay / events with only Běh phases → rank by time across all heats
+    finalAthletes = buildBehRanking(rows);
+  } else if (hasFinal) {
+    // Standard final + possible heats (200m)
+    const finalRows = rows.filter(r => getPhaseType(r['Fáze']) === 'final');
+    const heatRows = rows.filter(r => getPhaseType(r['Fáze']) === 'heat');
+
+    // Finalists that have valid numeric placements or DNS/DQ etc in final
+    const finalistClubs = new Set(finalRows.map(r => r['Závodník']));
+
+    // Build final athletes with their places
+    let fa = finalRows.map(r => ({
+      club: r['Oddíl/stát'],
+      athlete: r['Závodník'],
+      place: parsePlacard(r['Pořadí']),
+      výkon: r['Výkon'],
+      nonFinish: isNonFinish(r['Výkon']),
+    }));
+
+    // Count how many have numeric places in final
+    const withPlace = fa.filter(a => a.place !== null);
+    const maxFinalPlace = withPlace.length > 0 ? Math.max(...withPlace.map(a=>a.place)) : 0;
+
+    // If final has fewer than 8 finishers, supplement from heats
+    // Exclude athletes who were in the final
+    if (maxFinalPlace < 8 && heatRows.length > 0) {
+      // For counting DNS/DQ in final: they still hold a slot
+      const finalCount = fa.length; // total athletes in final including DNS/DQ
+      const neededFromHeats = 8 - finalCount;
+
+      if (neededFromHeats > 0) {
+        // Get heat athletes not in final, with valid times, sorted by time asc
+        const heatCandidates = heatRows
+          .filter(r => !finalistClubs.has(r['Závodník']))
+          .filter(r => !isNonFinish(r['Výkon']) && parseTime(String(r['Výkon'])) !== null)
+          .map(r => ({
+            club: r['Oddíl/stát'],
+            athlete: r['Závodník'],
+            výkon: r['Výkon'],
+            time: parseTime(String(r['Výkon']))
+          }))
+          // Deduplicate athletes (keep best time)
+          .sort((a,b) => a.time - b.time);
+
+        const seen = new Set();
+        const unique = [];
+        for (const c of heatCandidates) {
+          if (!seen.has(c.athlete)) { seen.add(c.athlete); unique.push(c); }
+        }
+
+        const supplement = unique.slice(0, neededFromHeats);
+        let nextPlace = finalCount + 1;
+        for (const s of supplement) {
+          fa.push({ club: s.club, athlete: s.athlete, place: nextPlace++, výkon: s.výkon, nonFinish: false });
+        }
+      }
+    }
+
+    finalAthletes = fa;
+  } else if (hasBeh) {
+    // Beh races (60m etc) — there IS a final phase among the Běh or Finále
+    // but this path hit if no 'final' detected — fall back to Běh ranking
+    finalAthletes = buildBehRanking(rows);
+  }
+
+  // 3. Assign points with tie averaging
+  return assignPointsToAthletes(finalAthletes, disc, gender);
+}
+
+function buildDoubleFinalRanking(rows) {
+  // Finále 1 and Finále 2 athletes combined, ranked by time
+  const finalRows = rows.filter(r => {
+    const pt = getPhaseType(r['Fáze']);
+    return pt === 'double_final';
+  });
+
+  // Build list: valid results get time, DNS/DQ/DNF get placed at end
+  const valid = [];
+  const invalid = [];
+  for (const r of finalRows) {
+    if (isNonFinish(r['Výkon'])) {
+      invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+    } else {
+      const t = parseTime(String(r['Výkon']));
+      if (t !== null) valid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
+      else invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+    }
+  }
+  valid.sort((a,b) => a.time - b.time);
+  const combined = [...valid, ...invalid];
+  combined.forEach((a,i) => { a.place = i+1; });
+  return combined;
+}
+
+function buildBehRanking(rows) {
+  // Determine if this is a running event (rank by time asc) or field (rank by value desc)
+  // Relays/sprint = time. Field = distance/height desc.
+  const valid = [];
+  const invalid = [];
+  for (const r of rows) {
+    if (isNonFinish(r['Výkon'])) {
+      invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+    } else {
+      const t = parseTime(String(r['Výkon']));
+      if (t !== null) valid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
+      else invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+    }
+  }
+  // Deduplicate by athlete name (keep best)
+  valid.sort((a,b) => a.time - b.time);
+  const seen = new Set();
+  const unique = [];
+  for (const v of valid) {
+    if (!seen.has(v.athlete)) { seen.add(v.athlete); unique.push(v); }
+  }
+  const combined = [...unique, ...invalid];
+  combined.forEach((a,i) => { a.place = i+1; });
+  return combined;
+}
+
+function assignPointsToAthletes(athletes, disc, gender) {
+  if (!athletes.length) return [];
+
+  // Group by numeric place to detect ties
+  const byPlace = {};
+  for (const a of athletes) {
+    if (a.place === null) continue;
+    if (!byPlace[a.place]) byPlace[a.place] = [];
+    byPlace[a.place].push(a);
+  }
+
+  const out = [];
+  const placesProcessed = new Set();
+
+  for (const a of athletes) {
+    if (a.place === null && !a.nonFinish) continue;
+    let place = a.place;
+    if (place === null) continue; // no place at all - skip
+
+    if (place > 8) continue; // only 1-8 get points
+
+    if (placesProcessed.has(place)) continue;
+    placesProcessed.add(place);
+
+    const group = byPlace[place] || [a];
+    // group occupies places [place .. place+group.length-1]
+    const placesOccupied = [];
+    for (let i = 0; i < group.length; i++) {
+      const p = place + i;
+      if (p <= 8) placesOccupied.push(p);
+    }
+    if (placesOccupied.length === 0) continue;
+
+    const totalPoints = placesOccupied.reduce((s, p) => s + (PLACE_POINTS[p] || 0), 0);
+    const pts = totalPoints / group.length;
+
+    for (const member of group) {
+      if ((member.place || 0) > 8) continue;
+      out.push({
+        disc, gender,
+        club: member.club,
+        kraj: KAS_MAP[member.club] || '?',
+        place: member.place,
+        points: pts
+      });
+    }
+    // mark group places as processed
+    for (const g of group) { placesProcessed.add(g.place); }
+  }
+  return out;
+}
+
+// ─── AGGREGATION ─────────────────────────────────────────────────────────────
+function aggregate(results) {
+  const clubs = {};
+  for (const r of results) {
+    if (!r.club) continue;
+    if (!clubs[r.club]) {
+      clubs[r.club] = { club: r.club, kraj: r.kraj, places: {1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0}, total: 0, finals: 0 };
+    }
+    const c = clubs[r.club];
+    if (r.place >= 1 && r.place <= 8) {
+      // For tied places, count fractionally (each member counts 1/group size → but spec shows integer counts)
+      // Actually the PDF shows integer counts per place - we count 1 per athlete per place
+      c.places[r.place] = (c.places[r.place] || 0) + 1;
+      c.finals++;
+    }
+    c.total += r.points;
+  }
+
+  return Object.values(clubs).sort((a,b) => {
+    if (b.total !== a.total) return b.total - a.total;
+    if (b.finals !== a.finals) return b.finals - a.finals;
+    return a.club.localeCompare(b.club);
+  });
+}
+
+// ─── RENDER TABLE ─────────────────────────────────────────────────────────────
+function fmtPts(n) {
+  // Czech decimal: use comma
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(1).replace('.', ',');
+}
+
+function renderTable(clubs) {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  clubs.forEach((c, i) => {
+    const rank = i + 1;
+    const tr = document.createElement('tr');
+    if (rank <= 3) tr.className = 'rank-'+rank;
+    const placesCells = [1,2,3,4,5,6,7,8].map(p => {
+      const v = c.places[p] || 0;
+      return `<td class="${v ? 'count-cell' : 'zero-cell'}">${v || '–'}</td>`;
+    }).join('');
+    tr.innerHTML = `
+      <td class="rank-cell">${rank}</td>
+      <td>${c.club}</td>
+      <td>${c.kraj}</td>
+      ${placesCells}
+      <td class="count-cell"><strong>${c.finals}</strong></td>
+      <td class="points-cell">${fmtPts(c.total)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─── STATS ─────────────────────────────────────────────────────────────────
+function renderStats(clubs) {
+  const statsRow = document.getElementById('statsRow');
+  const totalClubs = clubs.length;
+  const totalPoints = clubs.reduce((s,c) => s+c.total, 0);
+  const totalFinals = clubs.reduce((s,c) => s+c.finals, 0);
+  statsRow.innerHTML = `
+    <div class="stat-card"><div class="val">${totalClubs}</div><div class="lbl">Klubů v tabulce</div></div>
+    <div class="stat-card"><div class="val">${totalFinals}</div><div class="lbl">Finálových umístění</div></div>
+    <div class="stat-card"><div class="val">${fmtPts(totalPoints)}</div><div class="lbl">Bodů celkem</div></div>
+    <div class="stat-card"><div class="val">${clubs[0]?.club || '–'}</div><div class="lbl">1. místo</div></div>
+  `;
+}
+
+// ─── TABS ──────────────────────────────────────────────────────────────────
+function buildTabs() {
+  const genders = [...new Set(allResults.map(r => r.gender))].sort();
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = '<div class="tab active" data-cat="all" onclick="switchTab(this)">Celkem</div>';
+  for (const g of genders) {
+    const t = document.createElement('div');
+    t.className = 'tab';
+    t.dataset.cat = g;
+    t.textContent = g;
+    t.setAttribute('onclick', 'switchTab(this)');
+    tabs.appendChild(t);
+  }
+}
+
+function switchTab(el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  currentCat = el.dataset.cat;
+  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
+  const clubs = aggregate(filtered);
+  renderTable(clubs);
+  renderStats(clubs);
+}
+
+// ─── EXPORT ─────────────────────────────────────────────────────────────────
+function getTableData() {
+  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
+  return aggregate(filtered);
+}
+
+function getKasData(clubs) {
+  // Group clubs by region (kraj), sum points
+  const kas = {};
+  for (const c of clubs) {
+    const k = c.kraj || '?';
+    if (!kas[k]) kas[k] = { kraj: k, total: 0, clubs: [] };
+    kas[k].total += c.total;
+    kas[k].clubs.push(c);
+  }
+  // Sort regions by total desc, clubs within regions by total desc
+  return Object.values(kas)
+    .sort((a,b) => b.total - a.total)
+    .map(k => ({ ...k, clubs: k.clubs.sort((a,b) => b.total - a.total) }));
+}
+
+function exportCSV() {
+  const clubs = getTableData();
+  const header = ['Pořadí','Klub','Kraj','1.','2.','3.','4.','5.','6.','7.','8.','Finálových umístění','Body'];
+  const rows = clubs.map((c,i) => [
+    i+1, c.club, c.kraj,
+    c.places[1]||0, c.places[2]||0, c.places[3]||0, c.places[4]||0,
+    c.places[5]||0, c.places[6]||0, c.places[7]||0, c.places[8]||0,
+    c.finals, fmtPts(c.total)
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
+  const dataUri = 'data:text/csv;charset=utf-8,\ufeff' + encodeURIComponent(csv);
+  const a = document.createElement('a');
+  a.href = dataUri; a.download = 'bodovani_klubu.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PDF THEME — Bodování klubů
+// Typography: Inter (embedded TTF) | Layout: A4 portrait | First-page title only
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── PALETTE ────────────────────────────────────────────────────────────────────
+const C = {
+  navy:    [22, 38, 84],       // header bg, KAS section bg
+  navyDim: [40, 60, 120],      // lighter navy accent
+  gold:    [255, 243, 176],    // rank 1
+  silver:  [232, 234, 242],    // rank 2
+  bronze:  [255, 224, 182],    // rank 3
+  alt:     [246, 247, 251],    // even row tint
+  white:   [255, 255, 255],
+  rule:    [210, 215, 228],    // thin separator colour
+  txt:     [22,  28,  50],     // body text
+  muted:   [110, 118, 145],    // secondary text
+  accent:  [30,  60, 160],     // points column highlight
+  footer:  [150, 155, 175],
+};
+
+// ── TYPOGRAPHY SCALE ───────────────────────────────────────────────────────────
+const T = {
+  title:     18,   // report title (page 1 only)
+  subtitle:  10,   // category label (page 1 only)
+  section:    9,   // section heading ("Přehled KAS...")
+  tblHead:   9.5,  // table column headers
+  body:       9,   // table body rows
+  bodyBold:   9,   // bold body (points etc.)
+  footer:     7.5, // page footer
+};
+
+// ── CELL METRICS ──────────────────────────────────────────────────────────────
+const PAD = { top: 2.8, right: 3, bottom: 2.8, left: 3 };  // cell padding mm
+const PAD_SM = { top: 2, right: 3, bottom: 2, left: 3 };    // compact rows
+
+// ── MARGINS ───────────────────────────────────────────────────────────────────
+const MARGIN = { left: 16, right: 16, bottom: 18 };
+
+// ── FONT SETUP ────────────────────────────────────────────────────────────────
+const FONT_FAMILY = 'Inter';
+let fontsLoaded = false;
+
+function loadFonts(doc) {
+  if (fontsLoaded) return;
+  if (!window.INTER_REGULAR_B64 || !window.INTER_SEMIBOLD_B64) {
+    console.warn('Inter font data not found, falling back to helvetica');
+    return;
+  }
+  doc.addFileToVFS('Inter-Regular.ttf',  window.INTER_REGULAR_B64);
+  doc.addFont('Inter-Regular.ttf',  FONT_FAMILY, 'normal');
+  doc.addFileToVFS('Inter-SemiBold.ttf', window.INTER_SEMIBOLD_B64);
+  doc.addFont('Inter-SemiBold.ttf', FONT_FAMILY, 'bold');
+  fontsLoaded = true;
+}
+
+function F(doc, weight='normal') {
+  const family = fontsLoaded ? FONT_FAMILY : 'helvetica';
+  doc.setFont(family, weight);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const CAT_LABEL   = () => currentCat === 'all' ? 'Celkem (Muži + Ženy)' : currentCat;
+const REPORT_TITLE = () => (document.getElementById('reportTitleInput')?.value?.trim()) || 'Bodování klubů';
+
+// ── PAGE 1 TITLE BLOCK ───────────────────────────────────────────────────────
+// Large decorative header — drawn ONLY on the first page before the table
+function drawTitleBlock(doc, title, subtitle, pageW) {
+  // Navy band
+  doc.setFillColor(...C.navy);
+  doc.rect(MARGIN.left, 14, pageW - MARGIN.left - MARGIN.right, 22, 'F');
+
+  // Title
+  F(doc, 'bold');
+  doc.setFontSize(T.title);
+  doc.setTextColor(...C.white);
+  doc.text(title, MARGIN.left + 5, 27);
+
+  // Subtitle
+  F(doc, 'normal');
+  doc.setFontSize(T.subtitle);
+  doc.setTextColor(190, 205, 240);
+  doc.text(subtitle, MARGIN.left + 5, 33.5);
+
+  doc.setTextColor(...C.txt);
+  return 14 + 22 + 6; // bottom Y of title block + spacing
+}
+
+// ── CONTINUATION HEADER ───────────────────────────────────────────────────────
+// Minimal top-of-page marker on pages 2+
+function drawContinuationHeader(doc, title, pageW) {
+  F(doc, 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...C.muted);
+  doc.text(title, MARGIN.left, 12);
+  doc.setDrawColor(...C.rule);
+  doc.setLineWidth(0.25);
+  doc.line(MARGIN.left, 14, pageW - MARGIN.right, 14);
+  doc.setTextColor(...C.txt);
+}
+
+// ── PAGE FOOTERS (run after all pages) ───────────────────────────────────────
+function addFooters(doc) {
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    doc.setDrawColor(...C.rule);
+    doc.setLineWidth(0.25);
+    doc.line(MARGIN.left, pageH - 14, pageW - MARGIN.right, pageH - 14);
+    F(doc, 'normal');
+    doc.setFontSize(T.footer);
+    doc.setTextColor(...C.footer);
+    doc.text('Bodování klubů – automaticky generováno aplikací', MARGIN.left, pageH - 9);
+    doc.text(`Strana ${i} / ${pages}`, pageW - MARGIN.right, pageH - 9, { align: 'right' });
+  }
+}
+
+// ── SECTION HEADING (between sections) ───────────────────────────────────────
+function drawSectionHeading(doc, text, y) {
+  F(doc, 'bold');
+  doc.setFontSize(T.section + 0.5);
+  doc.setTextColor(...C.navy);
+  doc.text(text, MARGIN.left, y);
+  doc.setTextColor(...C.txt);
+  return y + 7;
+}
+
+// ── SECTION 1: MAIN CLUB TABLE ────────────────────────────────────────────────
+function buildSection1(doc, clubs, startY, reportTitle) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const C1 = { rank:8, club:54, kas:21, place:7, finals:16, body:17 };
+  // Total: 8+55+22+(7×8=56)+16+17 = 174mm ✓ (fits 178mm usable)
+
+  const headCells = [
+    { content:'Poř.',           styles:{ halign:'center' } },
+    { content:'AO / AK',        styles:{ halign:'left'   } },
+    { content:'KAS',            styles:{ halign:'left'   } },
+    ...[1,2,3,4,5,6,7,8].map(n => ({ content:`${n}.`, styles:{ halign:'center' } })),
+    { content:'Fin. umístění',  styles:{ halign:'center' } },
+    { content:'Body',           styles:{ halign:'right'  } },
+  ];
+
+  const bodyRows = clubs.map((c, i) => {
+    const rank = i + 1;
+    const fill = rank===1 ? C.gold : rank===2 ? C.silver : rank===3 ? C.bronze
+               : (rank % 2 === 0) ? C.alt : C.white;
+    const ptsColor = rank <= 3 ? C.navy : C.accent;
+    return [
+      { content: rank,            styles:{ halign:'center', fontStyle: rank<=3?'bold':'normal', fillColor:fill } },
+      { content: c.club,          styles:{ halign:'left',   fillColor:fill, fontStyle: rank<=3?'bold':'normal' } },
+      { content: c.kraj,          styles:{ halign:'left',   fillColor:fill, fontSize:8, textColor:C.muted } },
+      ...[1,2,3,4,5,6,7,8].map(p => ({
+        content: c.places[p] || '–',
+        styles:{ halign:'center', fillColor:fill, textColor: c.places[p] ? C.txt : [200,205,220] }
+      })),
+      { content: c.finals,        styles:{ halign:'center', fillColor:fill } },
+      { content: fmtPts(c.total), styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:ptsColor } },
+    ];
+  });
+
+  doc.autoTable({
+    startY,
+    head: [headCells],
+    body: bodyRows,
+    theme: 'plain',
+    margin: { ...MARGIN, top: 20 },
+    headStyles: {
+      fillColor: C.navy, textColor: C.white,
+      fontStyle: 'bold', fontSize: T.tblHead,
+      fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
+      cellPadding: PAD,
+      lineColor: C.rule, lineWidth: 0,
+    },
+    bodyStyles: {
+      fontSize: T.body,
+      fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
+      cellPadding: PAD,
+      lineColor: C.rule, lineWidth: 0,
+      textColor: C.txt,
+    },
+    alternateRowStyles: {},  // we handle fill ourselves per-row
+    columnStyles: {
+      0:  { cellWidth: C1.rank },
+      1:  { cellWidth: C1.club },
+      2:  { cellWidth: C1.kas  },
+      3:  { cellWidth: C1.place }, 4:  { cellWidth: C1.place },
+      5:  { cellWidth: C1.place }, 6:  { cellWidth: C1.place },
+      7:  { cellWidth: C1.place }, 8:  { cellWidth: C1.place },
+      9:  { cellWidth: C1.place }, 10: { cellWidth: C1.place },
+      11: { cellWidth: C1.finals },
+      12: { cellWidth: C1.body   },
+    },
+    // thin row separator only
+    didParseCell: (d) => {
+      if (d.section === 'body') {
+        d.cell.styles.lineColor = [230, 232, 240];
+        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
+      }
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
+    },
+    showHead: 'everyPage',
+  });
+  return doc.lastAutoTable.finalY;
+}
+
+// ── SECTION 2: KAS % SUMMARY ─────────────────────────────────────────────────
+function buildSection2(doc, kasGroups, y, reportTitle) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const grand = kasGroups.reduce((s,k) => s + k.total, 0);
+  y = drawSectionHeading(doc, 'Přehled bodování podle krajských atletických svazů (KAS)', y);
+
+  const headCells = [
+    { content: 'KAS',            styles:{ halign:'left'   } },
+    { content: 'Fin. umístění',  styles:{ halign:'center' } },
+    { content: 'Body',           styles:{ halign:'right'  } },
+    { content: 'Podíl',          styles:{ halign:'right'  } },
+  ];
+
+  const bodyRows = [];
+  kasGroups.forEach((k, i) => {
+    const pct  = grand > 0 ? ((k.total / grand)*100).toFixed(1).replace('.',',') + ' %' : '–';
+    const fin  = k.clubs.reduce((s,c) => s + c.finals, 0);
+    const fill = i % 2 === 0 ? C.white : C.alt;
+    bodyRows.push([
+      { content: k.kraj,          styles:{ halign:'left',   fillColor:fill, fontStyle:'bold' } },
+      { content: fin,             styles:{ halign:'center', fillColor:fill } },
+      { content: fmtPts(k.total), styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:C.accent } },
+      { content: pct,             styles:{ halign:'right',  fillColor:fill, textColor:C.muted } },
+    ]);
+  });
+
+  const totFin = kasGroups.reduce((s,k) => s + k.clubs.reduce((ss,c) => ss+c.finals, 0), 0);
+  bodyRows.push([
+    { content:'Celkový součet', styles:{ halign:'left',  fillColor:[220,225,245], fontStyle:'bold' } },
+    { content: totFin,          styles:{ halign:'center',fillColor:[220,225,245], fontStyle:'bold' } },
+    { content: fmtPts(grand),   styles:{ halign:'right', fillColor:[220,225,245], fontStyle:'bold', textColor:C.accent } },
+    { content:'100,0 %',        styles:{ halign:'right', fillColor:[220,225,245], textColor:C.muted } },
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [headCells],
+    body: bodyRows,
+    theme: 'plain',
+    margin: { ...MARGIN, top: 20 },
+    tableWidth: 145,
+    headStyles: { fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead,
+                  fontName: fontsLoaded ? FONT_FAMILY : 'helvetica', cellPadding:PAD },
+    bodyStyles: { fontSize:T.body, fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
+                  cellPadding:PAD, textColor:C.txt },
+    columnStyles: { 0:{cellWidth:75}, 1:{cellWidth:26}, 2:{cellWidth:24}, 3:{cellWidth:20} },
+    didParseCell: (d) => {
+      if (d.section === 'body') {
+        d.cell.styles.lineColor = [230, 232, 240];
+        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
+      }
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
+    },
+    showHead: 'everyPage',
+  });
+  return doc.lastAutoTable.finalY;
+}
+
+// ── SECTION 3: KAS → CLUB BREAKDOWN ──────────────────────────────────────────
+function buildSection3(doc, kasGroups, y, reportTitle) {
+  const pageW = doc.internal.pageSize.getWidth();
+  y = drawSectionHeading(doc, 'Přehled bodování klubů podle KAS', y);
+
+  const bodyRows = [];
+  for (const kas of kasGroups) {
+    const kasFin = kas.clubs.reduce((s,c) => s + c.finals, 0);
+    // KAS header row
+    bodyRows.push([
+      { content: kas.kraj,        colSpan: 2,
+        styles:{ fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead + 0.5 } },
+      { content: `${kasFin} umístění`,
+        styles:{ fillColor:C.navy, textColor:[175,195,235], halign:'center', fontSize:8 } },
+      { content: fmtPts(kas.total),
+        styles:{ fillColor:C.navy, textColor:[200,220,255], fontStyle:'bold', halign:'right', fontSize:T.tblHead + 0.5 } },
+    ]);
+    // Club rows
+    kas.clubs.forEach((c, ci) => {
+      const fill = ci % 2 === 0 ? C.white : C.alt;
+      bodyRows.push([
+        { content: `${ci+1}.`,        styles:{ cellWidth:10, halign:'right',  fillColor:fill, textColor:C.muted, fontSize:8 } },
+        { content: c.club,            styles:{ fillColor:fill, fontSize:T.body } },
+        { content: `${c.finals} um.`, styles:{ halign:'center', fillColor:fill, textColor:C.muted, fontSize:8 } },
+        { content: fmtPts(c.total),   styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:C.accent } },
+      ]);
+    });
+    // Spacer row between KAS blocks
+    bodyRows.push([
+      { content:'', colSpan:4, styles:{ fillColor:C.white, cellPadding:{top:2, bottom:2, left:0, right:0} } }
+    ]);
+  }
+
+  const grand   = kasGroups.reduce((s,k) => s + k.total, 0);
+  const totFin  = kasGroups.reduce((s,k) => s + k.clubs.reduce((ss,c) => ss+c.finals, 0), 0);
+  bodyRows.push([
+    { content: 'Celkový součet', colSpan:2,
+      styles:{ fillColor:[220,225,245], fontStyle:'bold', fontSize:T.tblHead } },
+    { content: `${totFin} um.`,
+      styles:{ fillColor:[220,225,245], halign:'center', textColor:C.muted, fontSize:8 } },
+    { content: fmtPts(grand),
+      styles:{ fillColor:[220,225,245], fontStyle:'bold', halign:'right', textColor:C.accent } },
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [[
+      { content: '',              styles:{ cellWidth:10 } },
+      { content: 'Klub / KAS'                            },
+      { content: 'Fin. umístění', styles:{ halign:'center' } },
+      { content: 'Body',          styles:{ halign:'right'  } },
+    ]],
+    body: bodyRows,
+    theme: 'plain',
+    margin: { ...MARGIN, top: 20 },
+    headStyles: { fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead,
+                  fontName: fontsLoaded ? FONT_FAMILY : 'helvetica', cellPadding:PAD },
+    bodyStyles: { fontSize:T.body, fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
+                  cellPadding:PAD, textColor:C.txt },
+    columnStyles: { 0:{cellWidth:9}, 1:{cellWidth:105}, 2:{cellWidth:32}, 3:{cellWidth:28} },
+    didParseCell: (d) => {
+      if (d.section === 'body') {
+        d.cell.styles.lineColor = [230, 232, 240];
+        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
+      }
+    },
+    didDrawPage: (data) => {
+      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
+    },
+    showHead: 'everyPage',
+  });
+  return doc.lastAutoTable.finalY;
+}
+
+// ── CSV EXPORT ────────────────────────────────────────────────────────────────
+function getTableData() {
+  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
+  return aggregate(filtered);
+}
+
+function getKasData(clubs) {
+  const kas = {};
+  for (const c of clubs) {
+    const k = c.kraj || '?';
+    if (!kas[k]) kas[k] = { kraj:k, total:0, clubs:[] };
+    kas[k].total += c.total;
+    kas[k].clubs.push(c);
+  }
+  return Object.values(kas)
+    .sort((a,b) => b.total - a.total)
+    .map(k => ({ ...k, clubs: k.clubs.sort((a,b) => b.total - a.total) }));
+}
+
+function exportCSV() {
+  const clubs = getTableData();
+  const header = ['Pořadí','Klub','Kraj','1.','2.','3.','4.','5.','6.','7.','8.','Finálových umístění','Body'];
+  const rows = clubs.map((c,i) => [
+    i+1, c.club, c.kraj,
+    c.places[1]||0, c.places[2]||0, c.places[3]||0, c.places[4]||0,
+    c.places[5]||0, c.places[6]||0, c.places[7]||0, c.places[8]||0,
+    c.finals, fmtPts(c.total)
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
+  const dataUri = 'data:text/csv;charset=utf-8,\ufeff' + encodeURIComponent(csv);
+  const a = document.createElement('a');
+  a.href = dataUri; a.download = 'bodovani_klubu.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── MAIN exportPDF ────────────────────────────────────────────────────────────
+function exportPDF(mode) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  loadFonts(doc);
+
+  const pageW       = doc.internal.pageSize.getWidth();
+  const clubs       = getTableData();
+  const kasGroups   = getKasData(clubs);
+  const reportTitle = REPORT_TITLE();
+  const catLbl      = CAT_LABEL();
+
+  if (mode === 'table' || mode === 'full') {
+    const afterTitle = drawTitleBlock(doc, reportTitle, catLbl, pageW);
+    buildSection1(doc, clubs, afterTitle, reportTitle);
+  }
+
+  if (mode === 'kas' || mode === 'full') {
+    if (mode === 'full') doc.addPage();
+    const afterTitle = drawTitleBlock(doc, reportTitle, catLbl, pageW);
+    const afterS2    = buildSection2(doc, kasGroups, afterTitle, reportTitle);
+    const pageH      = doc.internal.pageSize.getHeight();
+    const nextY      = afterS2 + 12;
+    if (nextY > pageH - 40) {
+      doc.addPage();
+      drawContinuationHeader(doc, reportTitle, pageW);
+      buildSection3(doc, kasGroups, 22, reportTitle);
+    } else {
+      buildSection3(doc, kasGroups, nextY, reportTitle);
+    }
+  }
+
+  addFooters(doc);
+
+  const fname = mode === 'table' ? 'bodovani_tabulka.pdf'
+              : mode === 'kas'   ? 'bodovani_kas_souhrn.pdf'
+              : 'bodovani_kompletni_report.pdf';
+  doc.save(fname);
+}
+
+
+// ─── FILE HANDLING ───────────────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.(xlsx|xls)$/i)) { showError('Nahrajte prosím soubor ve formátu .xlsx nebo .xls'); return; }
+
+  document.getElementById('statusBox').style.display = 'block';
+  document.getElementById('errorBox').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'none';
+  [1,2,3,4,5].forEach(n => setStatus(n,'pending'));
+  setStatus(1,'active');
+
+  setTimeout(() => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        setStatus(1,'done');
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        processFile(wb);
+        buildTabs();
+        const clubs = aggregate(allResults);
+        renderStats(clubs);
+        renderTable(clubs);
+        setStatus(5,'done');
+        setTimeout(() => {
+          document.getElementById('resultsSection').style.display = 'block';
+        }, 300);
+      } catch(err) {
+        console.error(err);
+        showError('Chyba při zpracování souboru: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }, 100);
+}
+
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
