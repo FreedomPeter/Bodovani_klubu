@@ -26,11 +26,83 @@ REGIONS = [
 ]
 
 
+# Helper mapping and function for robust region selection.
+REGION_ALIASES = {
+    "Pražský": ["Pražský"],
+    "Středočeský": ["Středočeský"],
+    "Jihočeský": ["Jihočeský"],
+    "Plzeňský": ["Plzeňský"],
+    "Karlovarský": ["Karlovarský"],
+    "Ústecký": ["Ústecký"],
+    "Liberecký": ["Liberecký"],
+    "Královéhradecký": ["Královéhradecký"],
+    "Pardubický": ["Pardubický"],
+    "Vysočina": ["Vysočina", "Kraj Vysočina"],
+    "Jihomoravský": ["Jihomoravský"],
+    "Olomoucký": ["Olomoucký", "Olomouc"],
+    "Zlínský": ["Zlínský"],
+    "Moravskoslezský": ["Moravskoslezský"],
+}
+def select_region_option(page, region_name: str):
+    """Select region robustly by inspecting actual option labels/values in the DOM."""
+    page.wait_for_selector("select#region", state="attached", timeout=15000)
+    page.wait_for_timeout(400)
+
+    options = page.eval_on_selector_all(
+        "select#region option",
+        """
+        els => els
+          .map(el => ({
+            value: (el.value || '').trim(),
+            label: (el.label || el.textContent || '').trim()
+          }))
+          .filter(o => o.value !== '' || o.label !== '')
+        """,
+    )
+
+    aliases = REGION_ALIASES.get(region_name, [region_name])
+
+    # 1) Exact label match
+    for alias in aliases:
+        for option in options:
+            if option["label"] == alias:
+                if option["value"]:
+                    page.locator("select#region").select_option(value=option["value"], timeout=10000)
+                else:
+                    page.locator("select#region").select_option(label=option["label"], timeout=10000)
+                return option
+
+    # 2) Exact value match
+    for alias in aliases:
+        for option in options:
+            if option["value"] == alias:
+                page.locator("select#region").select_option(value=option["value"], timeout=10000)
+                return option
+
+    # 3) Case-insensitive contains fallback
+    lowered_aliases = [alias.lower() for alias in aliases]
+    for option in options:
+        label_lower = option["label"].lower()
+        value_lower = option["value"].lower()
+        if any(alias in label_lower or alias in value_lower for alias in lowered_aliases):
+            if option["value"]:
+                page.locator("select#region").select_option(value=option["value"], timeout=10000)
+            else:
+                page.locator("select#region").select_option(label=option["label"], timeout=10000)
+            return option
+
+    raise RuntimeError(
+        f"Nepodařilo se najít volbu pro kraj '{region_name}'. Dostupné volby: "
+        + ", ".join(f"[{o['label']} | {o['value']}]" for o in options)
+    )
+
+
+
+
 def wait_for_table_to_refresh(page):
     """Wait until the table body is present and stable after filtering."""
     page.wait_for_selector("table tbody tr", timeout=15000)
-    # Small stabilization pause because the site updates the table asynchronously.
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(900)
 
 
 def read_rows_from_current_table(page, region_name: str):
@@ -66,21 +138,39 @@ def read_rows_from_current_table(page, region_name: str):
 def scrape_region(page, region_name: str):
     print(f"Scraping kraj: {region_name}")
 
-    # Set season if the filter exists.
+    # Reload the page fresh for every region so the form state does not get stuck
+    # after the previous asynchronous table refresh.
+    page.goto(BASE_URL, wait_until="domcontentloaded")
+    page.wait_for_timeout(1200)
+
+    # Accept cookie banner if it appears again.
     try:
-        season_select = page.locator("select").nth(0)
-        season_select.select_option(label=SEASON)
-        page.wait_for_timeout(200)
+        page.get_by_role("button", name="Souhlasím").click(timeout=1500)
+        page.wait_for_timeout(400)
+    except PlaywrightTimeoutError:
+        pass
     except Exception:
         pass
 
-    # Select the official region from the second select element.
-    region_select = page.locator("select").nth(1)
-    region_select.select_option(label=region_name)
+    # Make sure the region select is present on the freshly loaded page.
+    page.wait_for_selector("select#region", timeout=15000)
+
+    # Set season first.
+    try:
+        season_select = page.locator("select").nth(0)
+        season_select.select_option(label=SEASON, timeout=10000)
+        page.wait_for_timeout(250)
+    except Exception:
+        pass
+
+    # Select the official region from the region filter using robust option lookup.
+    selected_option = select_region_option(page, region_name)
+    print(f"  -> vybrána volba: {selected_option['label']} ({selected_option['value']})")
+    page.wait_for_timeout(350)
 
     # Click the filter button.
     filter_button = page.get_by_role("button", name="FILTRUJ")
-    filter_button.click()
+    filter_button.click(force=True)
 
     wait_for_table_to_refresh(page)
     region_rows = read_rows_from_current_table(page, region_name)
@@ -94,20 +184,6 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1400, "height": 1200})
-        page.goto(BASE_URL, wait_until="domcontentloaded")
-        page.wait_for_timeout(1200)
-
-        # Accept cookie banner if it appears.
-        try:
-            page.get_by_role("button", name="Souhlasím").click(timeout=2000)
-            page.wait_for_timeout(500)
-        except PlaywrightTimeoutError:
-            pass
-        except Exception:
-            pass
-
-        # Make sure the filter controls are visible.
-        page.wait_for_selector("select", timeout=15000)
 
         for region in REGIONS:
             try:
