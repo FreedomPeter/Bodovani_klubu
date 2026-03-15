@@ -1,124 +1,143 @@
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
 import time
-import re
+import pandas as pd
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-BASE_URL = "https://online.atletika.cz/clenska-sekce/oddily/adresar-oddilu/?strana="
+BASE_URL = "https://online.atletika.cz/clenska-sekce/oddily/adresar-oddilu/"
+SEASON = "2026"
+OUT_CSV = "clubs_database.csv"
+OUT_JSON = "clubs_database.json"
 
-clubs = []
-
-
-def infer_region_from_address(address: str) -> str:
-    if not address:
-        return "Neznámý"
-
-    text = " ".join(address.split())
-
-    # First try PSČ prefix because it is the most reliable signal in this dataset.
-    m = re.search(r"PSČ\s*(\d{3})\s*\d{2}", text)
-    if m:
-        prefix = int(m.group(1))
-
-        if 100 <= prefix <= 199:
-            return "Pražský"
-        if 250 <= prefix <= 299:
-            return "Středočeský"
-        if 370 <= prefix <= 399:
-            return "Jihočeský"
-        if 300 <= prefix <= 349:
-            return "Plzeňský"
-        if 350 <= prefix <= 364:
-            return "Karlovarský"
-        if 400 <= prefix <= 441:
-            return "Ústecký"
-        if 460 <= prefix <= 473 or 500 <= prefix <= 514:
-            return "Liberecký"
-        if 516 <= prefix <= 551:
-            return "Královéhradecký"
-        if 530 <= prefix <= 572:
-            return "Pardubický"
-        if 580 <= prefix <= 594 or 670 <= prefix <= 676:
-            return "Vysočina"
-        if 600 <= prefix <= 619 or 664 <= prefix <= 693:
-            return "Jihomoravský"
-        if 760 <= prefix <= 769 or 686 <= prefix <= 688:
-            return "Zlínský"
-        if 779 <= prefix <= 789 or 750 <= prefix <= 753:
-            return "Olomoucký"
-        if 700 <= prefix <= 749 or 792 <= prefix <= 794:
-            return "Moravskoslezský"
-
-    # Fallback by city / address text for rows where PSČ is malformed or missing.
-    fallback_keywords = {
-        "Pražský": ["Praha", "Kbely", "Uhříněves", "Hostivař", "Stodůlky", "Radotín", "Smíchov", "Vinohrady", "Letňany"],
-        "Středočeský": ["Kladno", "Kolín", "Nymburk", "Příbram", "Beroun", "Benešov", "Čelákovice", "Neratovice", "Mladá Boleslav", "Vlašim", "Poděbrady", "Rakovník", "Říčany", "Roztoky", "Slaný", "Brandýs", "Milovice", "Kutná Hora"],
-        "Jihočeský": ["České Budějovice", "Tábor", "Písek", "Prachatice", "Strakonice", "Třeboň", "Milevsko", "Jindřichův Hradec", "Sezimovo Ústí", "Trhové Sviny", "Veselí nad Lužnicí", "Bechyně"],
-        "Plzeňský": ["Plzeň", "Domažlice", "Klatovy", "Tachov", "Stříbro", "Nýřany", "Přeštice", "Rokycany", "Sušice", "Horšovský Týn"],
-        "Karlovarský": ["Karlovy Vary", "Cheb", "Sokolov", "Ostrov", "Kraslice", "Mariánské Lázně", "Chodov"],
-        "Ústecký": ["Ústí nad Labem", "Teplice", "Most", "Louny", "Chomutov", "Bílina", "Krupka", "Rumburk", "Děčín", "Litvínov", "Lovosice", "Varnsdorf", "Žatec", "Kadaň", "Klášterec nad Ohří", "Duchcov", "Štětí", "Počerady"],
-        "Liberecký": ["Liberec", "Jablonec", "Česká Lípa", "Turnov", "Semily", "Nový Bor", "Cvikov", "Desná", "Jilemnice", "Lomnice nad Popelkou", "Jičín"],
-        "Královéhradecký": ["Hradec Králové", "Trutnov", "Dvůr Králové", "Jaroměř", "Náchod", "Nové Město nad Metují", "Dobruška", "Vrchlabí", "Úpice", "Ostroměř", "Jičín", "Hajnice"],
-        "Pardubický": ["Pardubice", "Chrudim", "Svitavy", "Litomyšl", "Lanškroun", "Polička", "Choceň", "Vysoké Mýto", "Česká Třebová", "Ústí nad Orlicí", "Žamberk", "Slatiňany", "Týniště nad Orlicí", "Dlouhá Třebová", "Jablonné nad Orlicí", "Kunvald", "Klášterec nad Orlicí"],
-        "Vysočina": ["Jihlava", "Třebíč", "Žďár nad Sázavou", "Havlíčkův Brod", "Pelhřimov", "Humpolec", "Pacov", "Ledeč nad Sázavou", "Světlá nad Sázavou", "Velké Meziříčí", "Nové Město na Moravě", "Moravské Budějovice", "Okříšky", "Jaroměřice nad Rokytnou", "Jemnice"],
-        "Jihomoravský": ["Brno", "Blansko", "Břeclav", "Vyškov", "Hodonín", "Znojmo", "Kyjov", "Kuřim", "Rosice", "Mikulčice", "Tišnov", "Židlochovice", "Hustopeče", "Valtice", "Letovice", "Moravský Krumlov", "Slavkov u Brna", "Klobouky u Brna"],
-        "Zlínský": ["Zlín", "Uherské Hradiště", "Uherský Brod", "Kroměříž", "Otrokovice", "Holešov", "Valašské Meziříčí", "Vsetín", "Hulín", "Hluk", "Rožnov pod Radhoštěm", "Chropyně"],
-        "Olomoucký": ["Olomouc", "Prostějov", "Přerov", "Šumperk", "Šternberk", "Uničov", "Zábřeh", "Hranice"],
-        "Moravskoslezský": ["Ostrava", "Opava", "Karviná", "Havířov", "Bohumín", "Třinec", "Nový Jičín", "Kopřivnice", "Orlová", "Frýdek-Místek", "Krnov", "Poruba", "Rýmařov", "Bruntál", "Ludgeřovice", "Bolatice", "Kobeřice", "Razová", "Hošťálkovice"],
-    }
-
-    lowered = text.lower()
-    for region, keywords in fallback_keywords.items():
-        for keyword in keywords:
-            if keyword.lower() in lowered:
-                return region
-
-    return "Neznámý"
+# Official region names exactly as shown in the filter.
+REGIONS = [
+    "Pražský",
+    "Středočeský",
+    "Jihočeský",
+    "Plzeňský",
+    "Karlovarský",
+    "Ústecký",
+    "Liberecký",
+    "Královéhradecký",
+    "Pardubický",
+    "Vysočina",
+    "Jihomoravský",
+    "Olomoucký",
+    "Zlínský",
+    "Moravskoslezský",
+]
 
 
-for page in range(1, 20):
-    url = BASE_URL + str(page)
+def wait_for_table_to_refresh(page):
+    """Wait until the table body is present and stable after filtering."""
+    page.wait_for_selector("table tbody tr", timeout=15000)
+    # Small stabilization pause because the site updates the table asynchronously.
+    page.wait_for_timeout(600)
 
-    print("loading page", page)
 
-    r = requests.get(url)
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    rows = soup.select("table tbody tr")
-
-    if not rows:
-        break
+def read_rows_from_current_table(page, region_name: str):
+    rows = page.query_selector_all("table tbody tr")
+    clubs = []
 
     for row in rows:
-        td = row.find_all("td")
-
-        if len(td) < 5:
+        cells = row.query_selector_all("td")
+        if len(cells) < 5:
             continue
 
-        adresa = td[4].text.strip()
+        zkratka = cells[1].inner_text().strip()
+        nazev = cells[2].inner_text().strip()
+        kontakt = cells[3].inner_text().strip() if len(cells) > 3 else ""
+        adresa = cells[4].inner_text().strip() if len(cells) > 4 else ""
 
-        club = {
-            "zkratka": td[1].text.strip(),
-            "nazev": td[2].text.strip(),
-            "kontakt": td[3].text.strip() if len(td) > 3 else "",
-            "adresa": adresa,
-            "kraj": infer_region_from_address(adresa),
-        }
+        if not zkratka or not nazev:
+            continue
 
-        clubs.append(club)
+        clubs.append(
+            {
+                "zkratka": zkratka,
+                "nazev": nazev,
+                "kraj": region_name,
+                "kontakt": kontakt,
+                "adresa": adresa,
+            }
+        )
 
-    time.sleep(0.5)
-
-# Deduplicate by abbreviation + club name because the source sometimes repeats rows.
-df = pd.DataFrame(clubs).drop_duplicates(subset=["zkratka", "nazev"]).reset_index(drop=True)
-
-# Put kraj earlier so the output is easier to use in the app.
-df = df[["zkratka", "nazev", "kraj", "kontakt", "adresa"]]
+    return clubs
 
 
-df.to_csv("clubs_database.csv", index=False)
-df.to_json("clubs_database.json", orient="records", force_ascii=False)
+def scrape_region(page, region_name: str):
+    print(f"Scraping kraj: {region_name}")
 
-print("Hotovo.")
-print("Počet klubů:", len(df))
-print(df.head(10).to_string(index=False))
+    # Set season if the filter exists.
+    try:
+        season_select = page.locator("select").nth(0)
+        season_select.select_option(label=SEASON)
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
+
+    # Select the official region from the second select element.
+    region_select = page.locator("select").nth(1)
+    region_select.select_option(label=region_name)
+
+    # Click the filter button.
+    filter_button = page.get_by_role("button", name="FILTRUJ")
+    filter_button.click()
+
+    wait_for_table_to_refresh(page)
+    region_rows = read_rows_from_current_table(page, region_name)
+    print(f"  -> nalezeno {len(region_rows)} oddílů")
+    return region_rows
+
+
+def main():
+    all_clubs = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1400, "height": 1200})
+        page.goto(BASE_URL, wait_until="domcontentloaded")
+        page.wait_for_timeout(1200)
+
+        # Accept cookie banner if it appears.
+        try:
+            page.get_by_role("button", name="Souhlasím").click(timeout=2000)
+            page.wait_for_timeout(500)
+        except PlaywrightTimeoutError:
+            pass
+        except Exception:
+            pass
+
+        # Make sure the filter controls are visible.
+        page.wait_for_selector("select", timeout=15000)
+
+        for region in REGIONS:
+            try:
+                region_clubs = scrape_region(page, region)
+                all_clubs.extend(region_clubs)
+            except Exception as e:
+                print(f"Chyba při zpracování kraje {region}: {e}")
+
+        browser.close()
+
+    df = pd.DataFrame(all_clubs)
+
+    if df.empty:
+        raise RuntimeError(
+            "Nepodařilo se načíst žádné oddíly. Zkontroluj selektory stránky nebo změny v HTML."
+        )
+
+    # Deduplicate because some rows can appear multiple times across refreshes.
+    df = df.drop_duplicates(subset=["zkratka", "nazev", "kraj"]).reset_index(drop=True)
+    df = df[["zkratka", "nazev", "kraj", "kontakt", "adresa"]]
+    df = df.sort_values(by=["kraj", "nazev"], kind="stable").reset_index(drop=True)
+
+    df.to_csv(OUT_CSV, index=False)
+    df.to_json(OUT_JSON, orient="records", force_ascii=False)
+
+    print("Hotovo.")
+    print("Počet klubů:", len(df))
+    print(df.groupby("kraj").size().to_string())
+    print(df.head(15).to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
