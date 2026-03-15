@@ -270,88 +270,89 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 <footer>Bodování klubů MČR mládeže · Automaticky generováno</footer>
 
 <script>
-// ─── KAS MAP ────────────────────────────────────────────────────────────────
-const KAS_MAP = {
-  "AK ŠKODA Plzeň":"Plzeňský","TJ Sokol Hradec Králové":"Královéhradecký",
-  "Univerzitní sportovní klub Praha":"Pražský","TJ Sokol Kolín-atletika":"Středočeský",
-  "A. C. TEPO Kladno":"Středočeský","Atletický klub Olomouc z.s.":"Olomoucký",
-  "TJ Dukla Praha":"Pražský","SK Jeseniova":"Pražský",
-  "T. J. Sokol České Budějovice":"Jihočeský","ASK Dipoli z.s.":"Středočeský",
-  "AK Olymp Brno, spolek":"Jihomoravský","TJ Sokol Opava":"Moravskoslezský",
-  "Atletický klub Ludvíka Daňka Blansko, z.s.":"Jihomoravský",
-  "TJ Spartak Třebíč, spolek":"Vysočina","Lokomotiva FOSFA Břeclav":"Jihomoravský",
-  "PSK Olymp Praha, z.s.":"Pražský","TJ Spartak Čelákovice,z.s.":"Středočeský",
-  "SK Nové Město nad Metují":"Královéhradecký","VSK Univerzita Brno":"Jihomoravský",
-  "Atletika Jižní Město z.s.":"Pražský","AC Moravská Slavia Brno, spolek":"Jihomoravský",
-  "AK Slovan Duchcov":"Ústecký","Hvězda Pardubice z.s.":"Pardubický",
-  "SSK Vítkovice, z.s.":"Moravskoslezský","TJ LIAZ Jablonec n/N., z.s.":"Liberecký",
-  "Atletika Chrudim, z.s.":"Pardubický","Spartak Praha 4":"Pražský",
-  "ASK Slavia Praha":"Pražský","Atletický klub Zlín, z.s.":"Zlínský",
-  "TJ VS Tábor, z. s.":"Jihočeský","AC Slovan Liberec, z.s.":"Liberecký",
-  "AC Mladá Boleslav z.s.":"Liberecký","Atletika Nový Jičín z. s.":"Moravskoslezský",
-  "Atletika Stará Boleslav, z.s.":"Středočeský","TJ TŽ Třinec":"Moravskoslezský",
-  "Atletika Jihlava z.s.":"Vysočina","Atletika Poruba z.s.":"Moravskoslezský",
-  "TJ Lokomotiva Beroun z.s.":"Středočeský","TJ Sokol Velké Meziříčí":"Vysočina",
-  "AK Most":"Ústecký","SKP Nymburk, z.s.":"Středočeský","AC Turnov, z. s.":"Liberecký",
-  "Atletika Holešov, z.s.":"Zlínský","TJ Jiskra Litomyšl":"Pardubický",
-  "ASK Lovosice":"Ústecký","TJ Lokomotiva Trutnov, z.s.":"Královéhradecký",
-  "TJ Šumperk, z.s.":"Olomoucký","TJ Jiskra Ústí nad Orlicí, z.s.":"Pardubický",
-  "Atletika Benešov z.s.":"Středočeský","TRIATLET Karlovy Vary z.s.":"Karlovarský",
-  "Orel Vyškov":"Jihomoravský","AC Pardubice":"Pardubický","SC Radotín Praha":"Pražský",
-  "SK Sokol Zlatníky, z.s.":"Středočeský","SK Sporting Příbram, z.s.":"Středočeský",
-  "Sportovní kluby Spartak Slatiňany, z.s.":"Pardubický",
-  "AC Slovácká Slavia Uherské Hradiště":"Zlínský","AC Čáslav z.s.":"Středočeský",
-  "Atletický klub ISCAREX Česká Třebová, z.s.":"Pardubický",
-  "Atletika Slavkov u Brna, z.s.":"Jihomoravský","Atletika Vlašim, z.s.":"Středočeský",
-  "TJ Klášterec nad Ohří, z.s.":"Ústecký","USK PROVOD Ústí n/L.":"Ústecký",
-  "Atletický klub Bohumín, z.s.":"Moravskoslezský","Atletika Havířov 1965":"Moravskoslezský",
-  "TJ Sokol SG Plzeň-Petřín":"Plzeňský","AC Jablonec nad Nisou, z. s.":"Liberecký",
-  "AC Domažlice, z. s.":"Plzeňský","AK Bílina":"Ústecký",
-  "SC Start Karlovy Vary":"Karlovarský","SKP Union Cheb z.s.":"Karlovarský",
-  "TJ Dlouhá Třebová, z.s.":"Pardubický","AC Rumburk, z.s.":"Ústecký",
-  "KORELA SPORTS TEAM z. s.":"Vysočina","TJ Jiskra Otrokovice":"Zlínský",
-  "TJ Neratovice":"Středočeský","Atletický klub Hošťálkovice, z. s.":"Moravskoslezský",
-  "Athletic club Mariánské Lázně, z.s.":"Karlovarský",
-  "Atletický klub AHA Vyškov, z. s.":"Jihomoravský","MÍLAŘI Domažlice":"Plzeňský",
-  "SK Aktis Praha z.s.":"Pražský","SK Kotlářka Praha, z.s.":"Pražský",
-  "Školní atletický klub Slaný":"Středočeský","AC Vysoké Mýto z.s.":"Pardubický",
-  "Atletický klub Louny, z.s.":"Ústecký","TJ Jiskra Humpolec":"Vysočina",
-  "TJ Slezan Opava, z.s.":"Moravskoslezský",
-  "Atletický oddíl - STŘELA Žebrák, z.s.":"Středočeský",
-  "TJ Baník Stříbro, spolek":"Plzeňský",
-  "AC Sportguides Rožnov pod Radhoštěm z.s.":"Zlínský","AK Kroměříž":"Zlínský",
-  "AK Sokol Nehvizdy":"Středočeský","ASK ELNA Počerady":"Ústecký",
-  "Atletický klub Krupka, z.s.":"Ústecký","TJ Nové Město na Moravě z.s.":"Vysočina",
-  "Atletický klub Šternberk z.s.":"Olomoucký","TJ Slavoj BANES Pacov":"Vysočina",
-  "TJ VTŽ CHOMUTOV,z.s.":"Ústecký","TJ Svitavy, z. s.":"Pardubický",
-  "Atletický klub Emila Zátopka Kopřivnice":"Moravskoslezský","JAC Brno":"Jihomoravský",
-  "TJ Sokol Praha Královské Vinohrady":"Pražský",
-  "Tělovýchovná jednota Slezan Frýdek-Místek, z.s.":"Moravskoslezský",
-  "Atletický klub Hodonín,z.s.":"Jihomoravský",
-  "SK Čtyři Dvory České Budějovice":"Jihočeský","TJ Nová Včelnice, z.s.":"Jihočeský",
-  "Atletika Klatovy z.s.":"Plzeňský","TJ Znojmo, z.s.":"Jihomoravský",
-  "Athletic Club Ústí n/L. z.s.":"Ústecký",
-  "Sportovní klub Přerov 1908 z.s.":"Olomoucký","TJ Sokol Milevsko":"Jihočeský",
-  "AC Čejkovice":"Jihomoravský","AC TJ Jičín, z. s.":"Liberecký",
-  "SK Hranice, z.s.":"Olomoucký","TJ Jiskra Havlíčkův Brod":"Vysočina",
-  "A. C. Sparta Praha":"Pražský","Atletika Stodůlky, z.s.":"Pražský",
-  "TJ Slavoj Český Brod, z.s.":"Středočeský","Fénix sport Blansko":"Jihomoravský",
-  "SK ANTE Žďár nad Sázavou":"Vysočina","TJ Spartak Hořovice":"Středočeský",
-  "Atletický klub Sokolov, spolek":"Karlovarský",
-  "Aktiv Sport Horšovský Týn, z.s.":"Plzeňský","ATLETIKA Polička, spolek":"Pardubický",
-  "TJ Jiskra Nový Bor":"Liberecký","ROAD2KONA":"Pražský",
-  "Atletika Ostrov, z.s.":"Karlovarský","Atletický klub Kuřim, z.s.":"Jihomoravský",
-  "TJ Jiskra Zruč nad Sázavou z.s.":"Středočeský","TJ Sušice, z.s.":"Plzeňský",
-  "TJ Lokomotiva Veselí nad Lužnicí z.s.":"Jihočeský",
-  "Atletika Čelákovice z.s.":"Středočeský",
-  "Tělocvičná jednota Sokol I. Smíchov":"Pražský",
-  "TJ Velká nad Veličkou":"Jihomoravský","SK Vrchlabí, z. s.":"Královéhradecký",
-  "Atletický klub Prostějov, z. s.":"Olomoucký",
-  "Sportovní klub LS Kladno, z. s.":"Středočeský",
-  "TJ Jäkl Karviná, z. s.":"Moravskoslezský",
-  "AC TRACK & FIELD Brno z.s.":"Jihomoravský",
-  "Atletika Vlašim z.s.":"Středočeský"
-};
+// ─── KAS MAP (loaded from CSV) ──────────────────────────────────────────────
+let KAS_MAP = {};
+
+// ─── NORMALIZE CLUB NAME ────────────────────────────────────────────────────
+function normalizeClubName(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ─── PARSE CSV WITH QUOTED VALUES ───────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const result = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const row = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      
+      if (char === '"') {
+        if (inQuotes && line[j + 1] === '"') {
+          current += '"';
+          j++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    row.push(current.trim());
+    result.push(row);
+  }
+  
+  return result;
+}
+
+// ─── LOAD KAS MAP FROM CSV ──────────────────────────────────────────────────
+async function loadKasMapFromCsv() {
+  try {
+    const response = await fetch('clubs_database.csv');
+    const text = await response.text();
+    const rows = parseCSV(text);
+    
+    // Skip header row (zkratka,nazev,kraj,kontakt,adresa)
+    // Column indexes: 0=zkratka, 1=nazev, 2=kraj, 3=kontakt, 4=adresa
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.length >= 3) {
+        const nazev = row[1];
+        const kraj = row[2];
+        if (nazev && kraj) {
+          const normalizedName = normalizeClubName(nazev);
+          KAS_MAP[normalizedName] = kraj;
+        }
+      }
+    }
+    
+    console.log(`Loaded ${Object.keys(KAS_MAP).length} clubs from CSV`);
+  } catch (err) {
+    console.error('Failed to load clubs_database.csv:', err);
+  }
+}
+
+// ─── GET KRAJ FOR CLUB ──────────────────────────────────────────────────────
+function getKrajForClub(clubName) {
+  const normalized = normalizeClubName(clubName);
+  return KAS_MAP[normalized] || 'Neznámý';
+}
 
 // ─── POINTS TABLE ───────────────────────────────────────────────────────────
 const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
@@ -645,7 +646,7 @@ function assignPointsToAthletes(athletes, disc, gender) {
       out.push({
         disc, gender,
         club: member.club,
-        kraj: KAS_MAP[member.club] || '?',
+        kraj: getKrajForClub(member.club),
         place: member.place,
         points: pts
       });
@@ -1038,12 +1039,18 @@ function handleFile(file) {
   }, 100);
 }
 
-document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+// ─── INIT APP ───────────────────────────────────────────────────────────────
+(async function initApp() {
+  // Load club database before allowing file uploads
+  await loadKasMapFromCsv();
+  
+  document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
 
-const zone = document.getElementById('uploadZone');
-zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+})();
 </script>
 </body>
 </html>
