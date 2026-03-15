@@ -6,9 +6,6 @@
 <title>Bodování klubů MČR mládeže</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-<script src="jspdf.umd.min.js"></script>
-<script src="jspdf.autotable.min.js"></script>
-<script src="pdf-fonts.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -176,20 +173,23 @@ tbody tr.rank-3 .rank-cell { color: var(--bronze); }
 .tab { padding: 7px 18px; border-radius: 7px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--muted); }
 .tab.active { background: var(--accent); color: #fff; }
 
-/* Report title input */
-.report-title-bar {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 12px; padding: 10px 16px; margin-bottom: 16px;
+/* Kraje table expandable rows */
+.kas-row { cursor: pointer; }
+.kas-row:hover { background: var(--row-hover); }
+.kas-row td:first-child { position: relative; padding-left: 28px; }
+.kas-row td:first-child::before {
+  content: '▶';
+  position: absolute;
+  left: 10px;
+  font-size: 0.7rem;
+  transition: transform 0.2s;
+  color: var(--muted);
 }
-.report-title-bar label { font-size: 0.78rem; color: var(--muted); white-space: nowrap; font-weight: 600; }
-.report-title-bar input {
-  flex: 1; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; padding: 7px 12px; color: var(--text);
-  font-family: inherit; font-size: 0.875rem; outline: none;
-  transition: border-color 0.2s;
-}
-.report-title-bar input:focus { border-color: var(--accent); }
+.kas-row.expanded td:first-child::before { transform: rotate(90deg); }
+.club-subrow { background: var(--surface2); }
+.club-subrow td { padding: 8px 10px; font-size: 0.78rem; }
+.club-subrow td:first-child { padding-left: 40px; color: var(--muted); }
+.club-subrow.hidden { display: none; }
 
 footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78rem; }
 </style>
@@ -231,13 +231,6 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 
   <!-- Results -->
   <div id="resultsSection">
-    <!-- Report title input -->
-    <div class="report-title-bar">
-      <label for="reportTitleInput">Název reportu:</label>
-      <input id="reportTitleInput" type="text"
-        placeholder="např. Bodování klubů HMČR mládežnických kategorií 2026"
-        value="Bodování klubů MČR mládežnických kategorií">
-    </div>
 
     <div class="results-header">
       <div class="results-title">
@@ -246,9 +239,7 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
       </div>
       <div class="export-btns">
         <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
-        <button class="btn btn-outline" onclick="exportPDF('table')">📄 Export klubové bodování</button>
-        <button class="btn btn-outline" onclick="exportPDF('kas')">🗺 Export KAS souhrn</button>
-        <button class="btn btn-primary" onclick="exportPDF('full')">📋 Export kompletní report</button>
+        <button class="btn btn-primary" onclick="exportXLSX()">� Export XLSX</button>
       </div>
     </div>
 
@@ -260,7 +251,7 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 
     <div class="table-wrap">
       <table id="mainTable">
-        <thead>
+        <thead id="tableHead">
           <tr>
             <th>Poř.</th>
             <th style="text-align:left;padding-left:16px">AO / AK</th>
@@ -697,29 +688,6 @@ function fmtPts(n) {
   return n.toFixed(1).replace('.', ',');
 }
 
-function renderTable(clubs) {
-  const tbody = document.getElementById('tableBody');
-  tbody.innerHTML = '';
-  clubs.forEach((c, i) => {
-    const rank = i + 1;
-    const tr = document.createElement('tr');
-    if (rank <= 3) tr.className = 'rank-'+rank;
-    const placesCells = [1,2,3,4,5,6,7,8].map(p => {
-      const v = c.places[p] || 0;
-      return `<td class="${v ? 'count-cell' : 'zero-cell'}">${v || '–'}</td>`;
-    }).join('');
-    tr.innerHTML = `
-      <td class="rank-cell">${rank}</td>
-      <td>${c.club}</td>
-      <td>${c.kraj}</td>
-      ${placesCells}
-      <td class="count-cell"><strong>${c.finals}</strong></td>
-      <td class="points-cell">${fmtPts(c.total)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
 // ─── STATS ─────────────────────────────────────────────────────────────────
 function renderStats(clubs) {
   const statsRow = document.getElementById('statsRow');
@@ -747,21 +715,155 @@ function buildTabs() {
     t.setAttribute('onclick', 'switchTab(this)');
     tabs.appendChild(t);
   }
+  // Add Kraje tab
+  const krajeTab = document.createElement('div');
+  krajeTab.className = 'tab';
+  krajeTab.dataset.cat = 'kraje';
+  krajeTab.textContent = 'Kraje';
+  krajeTab.setAttribute('onclick', 'switchTab(this)');
+  tabs.appendChild(krajeTab);
 }
 
 function switchTab(el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   currentCat = el.dataset.cat;
-  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
-  const clubs = aggregate(filtered);
-  renderTable(clubs);
-  renderStats(clubs);
+  
+  if (currentCat === 'kraje') {
+    renderKrajeTable();
+    renderKrajeStats();
+  } else {
+    const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
+    const clubs = aggregate(filtered);
+    renderTable(clubs);
+    renderStats(clubs);
+  }
+}
+
+// ─── KRAJE TABLE RENDERING ─────────────────────────────────────────────────
+function renderKrajeTable() {
+  const thead = document.getElementById('tableHead');
+  thead.innerHTML = `
+    <tr>
+      <th>Poř.</th>
+      <th style="text-align:left;padding-left:28px">Kraj</th>
+      <th>Počet klubů</th>
+      <th>Finálových umístění</th>
+      <th>Body</th>
+    </tr>
+  `;
+  
+  const clubs = aggregate(allResults);
+  const kasGroups = getKasData(clubs);
+  
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  
+  kasGroups.forEach((kas, i) => {
+    const rank = i + 1;
+    const fin = kas.clubs.reduce((s, c) => s + c.finals, 0);
+    
+    // KAS row
+    const tr = document.createElement('tr');
+    tr.className = 'kas-row' + (rank <= 3 ? ' rank-' + rank : '');
+    tr.dataset.kasIndex = i;
+    tr.onclick = () => toggleKasExpand(tr, kas);
+    tr.innerHTML = `
+      <td class="rank-cell">${rank}</td>
+      <td style="text-align:left">${kas.kraj}</td>
+      <td class="count-cell">${kas.clubs.length}</td>
+      <td class="count-cell"><strong>${fin}</strong></td>
+      <td class="points-cell">${fmtPts(kas.total)}</td>
+    `;
+    tbody.appendChild(tr);
+    
+    // Club sub-rows (hidden initially)
+    kas.clubs.forEach((c, ci) => {
+      const subTr = document.createElement('tr');
+      subTr.className = 'club-subrow hidden';
+      subTr.dataset.kasIndex = i;
+      subTr.innerHTML = `
+        <td>${ci + 1}.</td>
+        <td style="text-align:left">${c.club}</td>
+        <td></td>
+        <td class="count-cell">${c.finals}</td>
+        <td class="points-cell">${fmtPts(c.total)}</td>
+      `;
+      tbody.appendChild(subTr);
+    });
+  });
+}
+
+function toggleKasExpand(row, kas) {
+  const kasIndex = row.dataset.kasIndex;
+  const isExpanded = row.classList.contains('expanded');
+  
+  // Toggle expanded state
+  row.classList.toggle('expanded');
+  
+  // Show/hide club sub-rows
+  const subRows = document.querySelectorAll(`.club-subrow[data-kas-index="${kasIndex}"]`);
+  subRows.forEach(sr => {
+    sr.classList.toggle('hidden', isExpanded);
+  });
+}
+
+function renderKrajeStats() {
+  const clubs = aggregate(allResults);
+  const kasGroups = getKasData(clubs);
+  const statsRow = document.getElementById('statsRow');
+  const totalKraje = kasGroups.length;
+  const totalClubs = clubs.length;
+  const totalPoints = clubs.reduce((s, c) => s + c.total, 0);
+  const totalFinals = clubs.reduce((s, c) => s + c.finals, 0);
+  statsRow.innerHTML = `
+    <div class="stat-card"><div class="val">${totalKraje}</div><div class="lbl">Krajů v tabulce</div></div>
+    <div class="stat-card"><div class="val">${totalClubs}</div><div class="lbl">Klubů celkem</div></div>
+    <div class="stat-card"><div class="val">${totalFinals}</div><div class="lbl">Finálových umístění</div></div>
+    <div class="stat-card"><div class="val">${kasGroups[0]?.kraj || '–'}</div><div class="lbl">1. místo</div></div>
+  `;
+}
+
+// ─── RENDER CLUBS TABLE (restore header for clubs view) ─────────────────────
+function renderTable(clubs) {
+  // Restore clubs table header
+  const thead = document.getElementById('tableHead');
+  thead.innerHTML = `
+    <tr>
+      <th>Poř.</th>
+      <th style="text-align:left;padding-left:16px">AO / AK</th>
+      <th>Kraj</th>
+      <th>1.</th><th>2.</th><th>3.</th><th>4.</th><th>5.</th><th>6.</th><th>7.</th><th>8.</th>
+      <th>Finálových umístění</th>
+      <th>Body</th>
+    </tr>
+  `;
+  
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  clubs.forEach((c, i) => {
+    const rank = i + 1;
+    const tr = document.createElement('tr');
+    if (rank <= 3) tr.className = 'rank-'+rank;
+    const placesCells = [1,2,3,4,5,6,7,8].map(p => {
+      const v = c.places[p] || 0;
+      return `<td class="${v ? 'count-cell' : 'zero-cell'}">${v || '–'}</td>`;
+    }).join('');
+    tr.innerHTML = `
+      <td class="rank-cell">${rank}</td>
+      <td>${c.club}</td>
+      <td>${c.kraj}</td>
+      ${placesCells}
+      <td class="count-cell"><strong>${c.finals}</strong></td>
+      <td class="points-cell">${fmtPts(c.total)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 // ─── EXPORT ─────────────────────────────────────────────────────────────────
 function getTableData() {
-  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
+  const filtered = currentCat === 'all' || currentCat === 'kraje' ? allResults : allResults.filter(r => r.gender === currentCat);
   return aggregate(filtered);
 }
 
@@ -781,7 +883,7 @@ function getKasData(clubs) {
 }
 
 function exportCSV() {
-  const clubs = getTableData();
+  const clubs = aggregate(allResults);
   const header = ['Pořadí','Klub','Kraj','1.','2.','3.','4.','5.','6.','7.','8.','Finálových umístění','Body'];
   const rows = clubs.map((c,i) => [
     i+1, c.club, c.kraj,
@@ -796,422 +898,107 @@ function exportCSV() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PDF THEME — Bodování klubů
-// Typography: Inter (embedded TTF) | Layout: A4 portrait | First-page title only
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── PALETTE ────────────────────────────────────────────────────────────────────
-const C = {
-  navy:    [22, 38, 84],       // header bg, KAS section bg
-  navyDim: [40, 60, 120],      // lighter navy accent
-  gold:    [255, 243, 176],    // rank 1
-  silver:  [232, 234, 242],    // rank 2
-  bronze:  [255, 224, 182],    // rank 3
-  alt:     [246, 247, 251],    // even row tint
-  white:   [255, 255, 255],
-  rule:    [210, 215, 228],    // thin separator colour
-  txt:     [22,  28,  50],     // body text
-  muted:   [110, 118, 145],    // secondary text
-  accent:  [30,  60, 160],     // points column highlight
-  footer:  [150, 155, 175],
-};
-
-// ── TYPOGRAPHY SCALE ───────────────────────────────────────────────────────────
-const T = {
-  title:     18,   // report title (page 1 only)
-  subtitle:  10,   // category label (page 1 only)
-  section:    9,   // section heading ("Přehled KAS...")
-  tblHead:   9.5,  // table column headers
-  body:       9,   // table body rows
-  bodyBold:   9,   // bold body (points etc.)
-  footer:     7.5, // page footer
-};
-
-// ── CELL METRICS ──────────────────────────────────────────────────────────────
-const PAD = { top: 2.8, right: 3, bottom: 2.8, left: 3 };  // cell padding mm
-const PAD_SM = { top: 2, right: 3, bottom: 2, left: 3 };    // compact rows
-
-// ── MARGINS ───────────────────────────────────────────────────────────────────
-const MARGIN = { left: 16, right: 16, bottom: 18 };
-
-// ── FONT SETUP ────────────────────────────────────────────────────────────────
-const FONT_FAMILY = 'Inter';
-let fontsLoaded = false;
-
-function loadFonts(doc) {
-  if (fontsLoaded) return;
-  if (!window.INTER_REGULAR_B64 || !window.INTER_SEMIBOLD_B64) {
-    console.warn('Inter font data not found, falling back to helvetica');
-    return;
-  }
-  doc.addFileToVFS('Inter-Regular.ttf',  window.INTER_REGULAR_B64);
-  doc.addFont('Inter-Regular.ttf',  FONT_FAMILY, 'normal');
-  doc.addFileToVFS('Inter-SemiBold.ttf', window.INTER_SEMIBOLD_B64);
-  doc.addFont('Inter-SemiBold.ttf', FONT_FAMILY, 'bold');
-  fontsLoaded = true;
-}
-
-function F(doc, weight='normal') {
-  const family = fontsLoaded ? FONT_FAMILY : 'helvetica';
-  doc.setFont(family, weight);
-}
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-const CAT_LABEL   = () => currentCat === 'all' ? 'Celkem (Muži + Ženy)' : currentCat;
-const REPORT_TITLE = () => (document.getElementById('reportTitleInput')?.value?.trim()) || 'Bodování klubů';
-
-// ── PAGE 1 TITLE BLOCK ───────────────────────────────────────────────────────
-// Large decorative header — drawn ONLY on the first page before the table
-function drawTitleBlock(doc, title, subtitle, pageW) {
-  // Navy band
-  doc.setFillColor(...C.navy);
-  doc.rect(MARGIN.left, 14, pageW - MARGIN.left - MARGIN.right, 22, 'F');
-
-  // Title
-  F(doc, 'bold');
-  doc.setFontSize(T.title);
-  doc.setTextColor(...C.white);
-  doc.text(title, MARGIN.left + 5, 27);
-
-  // Subtitle
-  F(doc, 'normal');
-  doc.setFontSize(T.subtitle);
-  doc.setTextColor(190, 205, 240);
-  doc.text(subtitle, MARGIN.left + 5, 33.5);
-
-  doc.setTextColor(...C.txt);
-  return 14 + 22 + 6; // bottom Y of title block + spacing
-}
-
-// ── CONTINUATION HEADER ───────────────────────────────────────────────────────
-// Minimal top-of-page marker on pages 2+
-function drawContinuationHeader(doc, title, pageW) {
-  F(doc, 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...C.muted);
-  doc.text(title, MARGIN.left, 12);
-  doc.setDrawColor(...C.rule);
-  doc.setLineWidth(0.25);
-  doc.line(MARGIN.left, 14, pageW - MARGIN.right, 14);
-  doc.setTextColor(...C.txt);
-}
-
-// ── PAGE FOOTERS (run after all pages) ───────────────────────────────────────
-function addFooters(doc) {
-  const pages = doc.getNumberOfPages();
-  for (let i = 1; i <= pages; i++) {
-    doc.setPage(i);
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    doc.setDrawColor(...C.rule);
-    doc.setLineWidth(0.25);
-    doc.line(MARGIN.left, pageH - 14, pageW - MARGIN.right, pageH - 14);
-    F(doc, 'normal');
-    doc.setFontSize(T.footer);
-    doc.setTextColor(...C.footer);
-    doc.text('Bodování klubů – automaticky generováno aplikací', MARGIN.left, pageH - 9);
-    doc.text(`Strana ${i} / ${pages}`, pageW - MARGIN.right, pageH - 9, { align: 'right' });
-  }
-}
-
-// ── SECTION HEADING (between sections) ───────────────────────────────────────
-function drawSectionHeading(doc, text, y) {
-  F(doc, 'bold');
-  doc.setFontSize(T.section + 0.5);
-  doc.setTextColor(...C.navy);
-  doc.text(text, MARGIN.left, y);
-  doc.setTextColor(...C.txt);
-  return y + 7;
-}
-
-// ── SECTION 1: MAIN CLUB TABLE ────────────────────────────────────────────────
-function buildSection1(doc, clubs, startY, reportTitle) {
-  const pageW = doc.internal.pageSize.getWidth();
-  const C1 = { rank:8, club:54, kas:21, place:7, finals:16, body:17 };
-  // Total: 8+55+22+(7×8=56)+16+17 = 174mm ✓ (fits 178mm usable)
-
-  const headCells = [
-    { content:'Poř.',           styles:{ halign:'center' } },
-    { content:'AO / AK',        styles:{ halign:'left'   } },
-    { content:'KAS',            styles:{ halign:'left'   } },
-    ...[1,2,3,4,5,6,7,8].map(n => ({ content:`${n}.`, styles:{ halign:'center' } })),
-    { content:'Fin. umístění',  styles:{ halign:'center' } },
-    { content:'Body',           styles:{ halign:'right'  } },
-  ];
-
-  const bodyRows = clubs.map((c, i) => {
-    const rank = i + 1;
-    const fill = rank===1 ? C.gold : rank===2 ? C.silver : rank===3 ? C.bronze
-               : (rank % 2 === 0) ? C.alt : C.white;
-    const ptsColor = rank <= 3 ? C.navy : C.accent;
-    return [
-      { content: rank,            styles:{ halign:'center', fontStyle: rank<=3?'bold':'normal', fillColor:fill } },
-      { content: c.club,          styles:{ halign:'left',   fillColor:fill, fontStyle: rank<=3?'bold':'normal' } },
-      { content: c.kraj,          styles:{ halign:'left',   fillColor:fill, fontSize:8, textColor:C.muted } },
-      ...[1,2,3,4,5,6,7,8].map(p => ({
-        content: c.places[p] || '–',
-        styles:{ halign:'center', fillColor:fill, textColor: c.places[p] ? C.txt : [200,205,220] }
-      })),
-      { content: c.finals,        styles:{ halign:'center', fillColor:fill } },
-      { content: fmtPts(c.total), styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:ptsColor } },
-    ];
+// ─── XLSX EXPORT ────────────────────────────────────────────────────────────
+function exportXLSX() {
+  const clubs = aggregate(allResults);
+  const kasGroups = getKasData(clubs);
+  const grand = kasGroups.reduce((s, k) => s + k.total, 0);
+  
+  // Sheet 1: Kluby
+  const sheet1Header = ['Pořadí', 'AO / AK', 'Kraj', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', 'Finálových umístění', 'Body'];
+  const sheet1Data = [sheet1Header];
+  clubs.forEach((c, i) => {
+    sheet1Data.push([
+      i + 1,
+      c.club,
+      c.kraj,
+      c.places[1] || 0,
+      c.places[2] || 0,
+      c.places[3] || 0,
+      c.places[4] || 0,
+      c.places[5] || 0,
+      c.places[6] || 0,
+      c.places[7] || 0,
+      c.places[8] || 0,
+      c.finals,
+      c.total
+    ]);
   });
-
-  doc.autoTable({
-    startY,
-    head: [headCells],
-    body: bodyRows,
-    theme: 'plain',
-    margin: { ...MARGIN, top: 20 },
-    headStyles: {
-      fillColor: C.navy, textColor: C.white,
-      fontStyle: 'bold', fontSize: T.tblHead,
-      fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
-      cellPadding: PAD,
-      lineColor: C.rule, lineWidth: 0,
-    },
-    bodyStyles: {
-      fontSize: T.body,
-      fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
-      cellPadding: PAD,
-      lineColor: C.rule, lineWidth: 0,
-      textColor: C.txt,
-    },
-    alternateRowStyles: {},  // we handle fill ourselves per-row
-    columnStyles: {
-      0:  { cellWidth: C1.rank },
-      1:  { cellWidth: C1.club },
-      2:  { cellWidth: C1.kas  },
-      3:  { cellWidth: C1.place }, 4:  { cellWidth: C1.place },
-      5:  { cellWidth: C1.place }, 6:  { cellWidth: C1.place },
-      7:  { cellWidth: C1.place }, 8:  { cellWidth: C1.place },
-      9:  { cellWidth: C1.place }, 10: { cellWidth: C1.place },
-      11: { cellWidth: C1.finals },
-      12: { cellWidth: C1.body   },
-    },
-    // thin row separator only
-    didParseCell: (d) => {
-      if (d.section === 'body') {
-        d.cell.styles.lineColor = [230, 232, 240];
-        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
-      }
-    },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
-    },
-    showHead: 'everyPage',
-  });
-  return doc.lastAutoTable.finalY;
-}
-
-// ── SECTION 2: KAS % SUMMARY ─────────────────────────────────────────────────
-function buildSection2(doc, kasGroups, y, reportTitle) {
-  const pageW = doc.internal.pageSize.getWidth();
-  const grand = kasGroups.reduce((s,k) => s + k.total, 0);
-  y = drawSectionHeading(doc, 'Přehled bodování podle krajských atletických svazů (KAS)', y);
-
-  const headCells = [
-    { content: 'KAS',            styles:{ halign:'left'   } },
-    { content: 'Fin. umístění',  styles:{ halign:'center' } },
-    { content: 'Body',           styles:{ halign:'right'  } },
-    { content: 'Podíl',          styles:{ halign:'right'  } },
-  ];
-
-  const bodyRows = [];
+  
+  // Sheet 2: Kraje
+  const sheet2Header = ['Pořadí', 'Kraj', 'Finálových umístění', 'Body', 'Podíl %'];
+  const sheet2Data = [sheet2Header];
   kasGroups.forEach((k, i) => {
-    const pct  = grand > 0 ? ((k.total / grand)*100).toFixed(1).replace('.',',') + ' %' : '–';
-    const fin  = k.clubs.reduce((s,c) => s + c.finals, 0);
-    const fill = i % 2 === 0 ? C.white : C.alt;
-    bodyRows.push([
-      { content: k.kraj,          styles:{ halign:'left',   fillColor:fill, fontStyle:'bold' } },
-      { content: fin,             styles:{ halign:'center', fillColor:fill } },
-      { content: fmtPts(k.total), styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:C.accent } },
-      { content: pct,             styles:{ halign:'right',  fillColor:fill, textColor:C.muted } },
+    const fin = k.clubs.reduce((s, c) => s + c.finals, 0);
+    const pct = grand > 0 ? ((k.total / grand) * 100).toFixed(1) : 0;
+    sheet2Data.push([
+      i + 1,
+      k.kraj,
+      fin,
+      k.total,
+      parseFloat(pct)
     ]);
   });
-
-  const totFin = kasGroups.reduce((s,k) => s + k.clubs.reduce((ss,c) => ss+c.finals, 0), 0);
-  bodyRows.push([
-    { content:'Celkový součet', styles:{ halign:'left',  fillColor:[220,225,245], fontStyle:'bold' } },
-    { content: totFin,          styles:{ halign:'center',fillColor:[220,225,245], fontStyle:'bold' } },
-    { content: fmtPts(grand),   styles:{ halign:'right', fillColor:[220,225,245], fontStyle:'bold', textColor:C.accent } },
-    { content:'100,0 %',        styles:{ halign:'right', fillColor:[220,225,245], textColor:C.muted } },
-  ]);
-
-  doc.autoTable({
-    startY: y,
-    head: [headCells],
-    body: bodyRows,
-    theme: 'plain',
-    margin: { ...MARGIN, top: 20 },
-    tableWidth: 145,
-    headStyles: { fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead,
-                  fontName: fontsLoaded ? FONT_FAMILY : 'helvetica', cellPadding:PAD },
-    bodyStyles: { fontSize:T.body, fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
-                  cellPadding:PAD, textColor:C.txt },
-    columnStyles: { 0:{cellWidth:75}, 1:{cellWidth:26}, 2:{cellWidth:24}, 3:{cellWidth:20} },
-    didParseCell: (d) => {
-      if (d.section === 'body') {
-        d.cell.styles.lineColor = [230, 232, 240];
-        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
-      }
-    },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
-    },
-    showHead: 'everyPage',
-  });
-  return doc.lastAutoTable.finalY;
-}
-
-// ── SECTION 3: KAS → CLUB BREAKDOWN ──────────────────────────────────────────
-function buildSection3(doc, kasGroups, y, reportTitle) {
-  const pageW = doc.internal.pageSize.getWidth();
-  y = drawSectionHeading(doc, 'Přehled bodování klubů podle KAS', y);
-
-  const bodyRows = [];
-  for (const kas of kasGroups) {
-    const kasFin = kas.clubs.reduce((s,c) => s + c.finals, 0);
-    // KAS header row
-    bodyRows.push([
-      { content: kas.kraj,        colSpan: 2,
-        styles:{ fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead + 0.5 } },
-      { content: `${kasFin} umístění`,
-        styles:{ fillColor:C.navy, textColor:[175,195,235], halign:'center', fontSize:8 } },
-      { content: fmtPts(kas.total),
-        styles:{ fillColor:C.navy, textColor:[200,220,255], fontStyle:'bold', halign:'right', fontSize:T.tblHead + 0.5 } },
-    ]);
-    // Club rows
-    kas.clubs.forEach((c, ci) => {
-      const fill = ci % 2 === 0 ? C.white : C.alt;
-      bodyRows.push([
-        { content: `${ci+1}.`,        styles:{ cellWidth:10, halign:'right',  fillColor:fill, textColor:C.muted, fontSize:8 } },
-        { content: c.club,            styles:{ fillColor:fill, fontSize:T.body } },
-        { content: `${c.finals} um.`, styles:{ halign:'center', fillColor:fill, textColor:C.muted, fontSize:8 } },
-        { content: fmtPts(c.total),   styles:{ halign:'right',  fillColor:fill, fontStyle:'bold', textColor:C.accent } },
-      ]);
+  
+  // Sheet 3: Kluby podle krajů
+  const sheet3Header = ['Kraj', 'Klub', 'Finálová umístění', 'Body'];
+  const sheet3Data = [sheet3Header];
+  kasGroups.forEach(kas => {
+    // Add KAS header row
+    const kasFin = kas.clubs.reduce((s, c) => s + c.finals, 0);
+    sheet3Data.push([kas.kraj, '', kasFin, kas.total]);
+    // Add club rows
+    kas.clubs.forEach(c => {
+      sheet3Data.push(['', c.club, c.finals, c.total]);
     });
-    // Spacer row between KAS blocks
-    bodyRows.push([
-      { content:'', colSpan:4, styles:{ fillColor:C.white, cellPadding:{top:2, bottom:2, left:0, right:0} } }
-    ]);
-  }
-
-  const grand   = kasGroups.reduce((s,k) => s + k.total, 0);
-  const totFin  = kasGroups.reduce((s,k) => s + k.clubs.reduce((ss,c) => ss+c.finals, 0), 0);
-  bodyRows.push([
-    { content: 'Celkový součet', colSpan:2,
-      styles:{ fillColor:[220,225,245], fontStyle:'bold', fontSize:T.tblHead } },
-    { content: `${totFin} um.`,
-      styles:{ fillColor:[220,225,245], halign:'center', textColor:C.muted, fontSize:8 } },
-    { content: fmtPts(grand),
-      styles:{ fillColor:[220,225,245], fontStyle:'bold', halign:'right', textColor:C.accent } },
-  ]);
-
-  doc.autoTable({
-    startY: y,
-    head: [[
-      { content: '',              styles:{ cellWidth:10 } },
-      { content: 'Klub / KAS'                            },
-      { content: 'Fin. umístění', styles:{ halign:'center' } },
-      { content: 'Body',          styles:{ halign:'right'  } },
-    ]],
-    body: bodyRows,
-    theme: 'plain',
-    margin: { ...MARGIN, top: 20 },
-    headStyles: { fillColor:C.navy, textColor:C.white, fontStyle:'bold', fontSize:T.tblHead,
-                  fontName: fontsLoaded ? FONT_FAMILY : 'helvetica', cellPadding:PAD },
-    bodyStyles: { fontSize:T.body, fontName: fontsLoaded ? FONT_FAMILY : 'helvetica',
-                  cellPadding:PAD, textColor:C.txt },
-    columnStyles: { 0:{cellWidth:9}, 1:{cellWidth:105}, 2:{cellWidth:32}, 3:{cellWidth:28} },
-    didParseCell: (d) => {
-      if (d.section === 'body') {
-        d.cell.styles.lineColor = [230, 232, 240];
-        d.cell.styles.lineWidth = { bottom: 0.15, top: 0, left: 0, right: 0 };
-      }
-    },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) drawContinuationHeader(doc, reportTitle, pageW);
-    },
-    showHead: 'everyPage',
   });
-  return doc.lastAutoTable.finalY;
-}
-
-// ── CSV EXPORT ────────────────────────────────────────────────────────────────
-function getTableData() {
-  const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
-  return aggregate(filtered);
-}
-
-function getKasData(clubs) {
-  const kas = {};
-  for (const c of clubs) {
-    const k = c.kraj || '?';
-    if (!kas[k]) kas[k] = { kraj:k, total:0, clubs:[] };
-    kas[k].total += c.total;
-    kas[k].clubs.push(c);
-  }
-  return Object.values(kas)
-    .sort((a,b) => b.total - a.total)
-    .map(k => ({ ...k, clubs: k.clubs.sort((a,b) => b.total - a.total) }));
-}
-
-function exportCSV() {
-  const clubs = getTableData();
-  const header = ['Pořadí','Klub','Kraj','1.','2.','3.','4.','5.','6.','7.','8.','Finálových umístění','Body'];
-  const rows = clubs.map((c,i) => [
-    i+1, c.club, c.kraj,
-    c.places[1]||0, c.places[2]||0, c.places[3]||0, c.places[4]||0,
-    c.places[5]||0, c.places[6]||0, c.places[7]||0, c.places[8]||0,
-    c.finals, fmtPts(c.total)
-  ]);
-  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
-  const dataUri = 'data:text/csv;charset=utf-8,\ufeff' + encodeURIComponent(csv);
-  const a = document.createElement('a');
-  a.href = dataUri; a.download = 'bodovani_klubu.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-}
-
-// ── MAIN exportPDF ────────────────────────────────────────────────────────────
-function exportPDF(mode) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-  loadFonts(doc);
-
-  const pageW       = doc.internal.pageSize.getWidth();
-  const clubs       = getTableData();
-  const kasGroups   = getKasData(clubs);
-  const reportTitle = REPORT_TITLE();
-  const catLbl      = CAT_LABEL();
-
-  if (mode === 'table' || mode === 'full') {
-    const afterTitle = drawTitleBlock(doc, reportTitle, catLbl, pageW);
-    buildSection1(doc, clubs, afterTitle, reportTitle);
-  }
-
-  if (mode === 'kas' || mode === 'full') {
-    if (mode === 'full') doc.addPage();
-    const afterTitle = drawTitleBlock(doc, reportTitle, catLbl, pageW);
-    const afterS2    = buildSection2(doc, kasGroups, afterTitle, reportTitle);
-    const pageH      = doc.internal.pageSize.getHeight();
-    const nextY      = afterS2 + 12;
-    if (nextY > pageH - 40) {
-      doc.addPage();
-      drawContinuationHeader(doc, reportTitle, pageW);
-      buildSection3(doc, kasGroups, 22, reportTitle);
-    } else {
-      buildSection3(doc, kasGroups, nextY, reportTitle);
-    }
-  }
-
-  addFooters(doc);
-
-  const fname = mode === 'table' ? 'bodovani_tabulka.pdf'
-              : mode === 'kas'   ? 'bodovani_kas_souhrn.pdf'
-              : 'bodovani_kompletni_report.pdf';
-  doc.save(fname);
+  
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Add Sheet 1
+  const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+  // Set column widths for Sheet 1
+  ws1['!cols'] = [
+    { wch: 6 },   // Pořadí
+    { wch: 45 },  // AO / AK
+    { wch: 18 },  // Kraj
+    { wch: 4 },   // 1.
+    { wch: 4 },   // 2.
+    { wch: 4 },   // 3.
+    { wch: 4 },   // 4.
+    { wch: 4 },   // 5.
+    { wch: 4 },   // 6.
+    { wch: 4 },   // 7.
+    { wch: 4 },   // 8.
+    { wch: 18 },  // Finálových umístění
+    { wch: 8 },   // Body
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Kluby');
+  
+  // Add Sheet 2
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+  ws2['!cols'] = [
+    { wch: 6 },   // Pořadí
+    { wch: 20 },  // Kraj
+    { wch: 18 },  // Finálových umístění
+    { wch: 8 },   // Body
+    { wch: 10 },  // Podíl %
+  ];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Kraje');
+  
+  // Add Sheet 3
+  const ws3 = XLSX.utils.aoa_to_sheet(sheet3Data);
+  ws3['!cols'] = [
+    { wch: 20 },  // Kraj
+    { wch: 45 },  // Klub
+    { wch: 18 },  // Finálová umístění
+    { wch: 8 },   // Body
+  ];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Kluby podle krajů');
+  
+  // Generate and download
+  XLSX.writeFile(wb, 'bodovani_klubu.xlsx');
 }
 
 
