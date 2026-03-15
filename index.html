@@ -191,6 +191,62 @@ tbody tr.rank-3 .rank-cell { color: var(--bronze); }
 .club-subrow td:first-child { padding-left: 40px; color: var(--muted); }
 .club-subrow.hidden { display: none; }
 
+/* Filters bar */
+.filters-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filter-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  min-width: 200px;
+}
+.filter-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.filter-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.filter-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--accent); }
+.sortable::after { content: ' ⇅'; font-size: 0.7rem; opacity: 0.5; }
+.sortable.asc::after { content: ' ↑'; opacity: 1; }
+.sortable.desc::after { content: ' ↓'; opacity: 1; }
+
 footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78rem; }
 </style>
 </head>
@@ -244,6 +300,8 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
     </div>
 
     <div class="stats-row" id="statsRow"></div>
+
+    <div class="filters-bar" id="filtersBar" style="display:none;"></div>
 
     <div class="tabs" id="tabs">
       <div class="tab active" data-cat="all" onclick="switchTab(this)">Celkem</div>
@@ -354,12 +412,40 @@ function getKrajForClub(clubName) {
   return KAS_MAP[normalized] || 'Neznámý';
 }
 
+// ─── LOAD CLUBS DATABASE FROM JSON ──────────────────────────────────────────
+async function loadClubsDatabase() {
+  try {
+    const response = await fetch('clubs_database.json');
+    clubsDatabase = await response.json();
+    console.log(`Loaded ${clubsDatabase.length} clubs from JSON database`);
+  } catch (err) {
+    console.error('Failed to load clubs_database.json:', err);
+    clubsDatabase = [];
+  }
+}
+
 // ─── POINTS TABLE ───────────────────────────────────────────────────────────
 const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
 
 // ─── GLOBALS ────────────────────────────────────────────────────────────────
-let allResults = []; // {discipline, gender, place, club, category}
+let allResults = []; // {disc, gender, club, kraj, place, points, athlete}
+let allAthleteResults = []; // Full athlete-level data for Disciplíny tab
 let currentCat = 'all';
+
+// Clubs database state
+let clubsDatabase = [];
+let clubSearchTerm = '';
+let selectedClubRegion = 'all';
+let clubSortCol = null;
+let clubSortDir = 'asc';
+
+// Disciplines state
+let disciplineSearchTerm = '';
+let selectedDiscipline = 'all';
+let selectedDisciplineGender = 'all';
+let showAllDisciplineResults = false;
+let discSortCol = null;
+let discSortDir = 'asc';
 
 // ─── UI HELPERS ─────────────────────────────────────────────────────────────
 function setStatus(n, state) {
@@ -432,11 +518,13 @@ function processFile(wb) {
   const discSet = [...new Set(filtered.map(r => r['Disciplína']))].filter(Boolean);
 
   allResults = [];
+  allAthleteResults = [];
 
   for (const disc of discSet) {
     const discRows = filtered.filter(r => r['Disciplína'] === disc);
-    const finalRows = processDiscipine(disc, discRows);
-    allResults.push(...finalRows);
+    const { pointsResults, fullResults } = processDiscipine(disc, discRows);
+    allResults.push(...pointsResults);
+    allAthleteResults.push(...fullResults);
   }
 
   setStatus(3,'done'); setStatus(4,'active');
@@ -468,7 +556,7 @@ function processDiscipine(disc, rows) {
   const hasBeh = phaseTypes.some(t => t === 'beh');
   const hasNone = phaseTypes.some(t => t === 'none');
 
-  let finalAthletes = []; // {club, place (numeric), výkon}
+  let finalAthletes = []; // {club, place (numeric), výkon, athlete}
 
   if (hasNone && !hasFinal && !hasDoubleFinal && !hasBeh) {
     // Direct results (field events, combined events, middle distance)
@@ -476,6 +564,7 @@ function processDiscipine(disc, rows) {
       .filter(r => r['Pořadí'] !== null && r['Pořadí'] !== undefined)
       .map(r => ({
         club: r['Oddíl/stát'],
+        athlete: r['Závodník'] || '',
         place: parsePlacard(r['Pořadí']),
         výkon: r['Výkon'],
         nonFinish: isNonFinish(r['Pořadí']) || isNonFinish(r['Výkon']),
@@ -550,8 +639,12 @@ function processDiscipine(disc, rows) {
     finalAthletes = buildBehRanking(rows);
   }
 
-  // 3. Assign points with tie averaging
-  return assignPointsToAthletes(finalAthletes, disc, gender);
+  // 3. Assign points with tie averaging (top 8 only)
+  const pointsResults = assignPointsToAthletes(finalAthletes, disc, gender);
+  // 4. Build full athlete results for Disciplíny tab
+  const fullResults = buildFullAthleteResults(finalAthletes, disc, gender);
+  
+  return { pointsResults, fullResults };
 }
 
 function buildDoubleFinalRanking(rows) {
@@ -648,13 +741,30 @@ function assignPointsToAthletes(athletes, disc, gender) {
         club: member.club,
         kraj: getKrajForClub(member.club),
         place: member.place,
-        points: pts
+        points: pts,
+        athlete: member.athlete || ''
       });
     }
     // mark group places as processed
     for (const g of group) { placesProcessed.add(g.place); }
   }
   return out;
+}
+
+// ─── BUILD FULL ATHLETE RESULTS ─────────────────────────────────────────────
+function buildFullAthleteResults(athletes, disc, gender) {
+  // Return ALL athletes with their places (not just top 8)
+  return athletes
+    .filter(a => a.place !== null)
+    .map(a => ({
+      disc,
+      gender,
+      club: a.club,
+      kraj: getKrajForClub(a.club),
+      place: a.place,
+      points: a.place <= 8 ? (PLACE_POINTS[a.place] || 0) : 0,
+      athlete: a.athlete || ''
+    }));
 }
 
 // ─── AGGREGATION ─────────────────────────────────────────────────────────────
@@ -723,6 +833,22 @@ function buildTabs() {
   krajeTab.textContent = 'Kraje';
   krajeTab.setAttribute('onclick', 'switchTab(this)');
   tabs.appendChild(krajeTab);
+  
+  // Add Databáze klubů tab
+  const clubsDbTab = document.createElement('div');
+  clubsDbTab.className = 'tab';
+  clubsDbTab.dataset.cat = 'clubs-db';
+  clubsDbTab.textContent = 'Databáze klubů';
+  clubsDbTab.setAttribute('onclick', 'switchTab(this)');
+  tabs.appendChild(clubsDbTab);
+  
+  // Add Disciplíny tab
+  const discTab = document.createElement('div');
+  discTab.className = 'tab';
+  discTab.dataset.cat = 'disciplines';
+  discTab.textContent = 'Disciplíny';
+  discTab.setAttribute('onclick', 'switchTab(this)');
+  tabs.appendChild(discTab);
 }
 
 function switchTab(el) {
@@ -730,9 +856,20 @@ function switchTab(el) {
   el.classList.add('active');
   currentCat = el.dataset.cat;
   
+  // Hide filters by default
+  document.getElementById('filtersBar').style.display = 'none';
+  
   if (currentCat === 'kraje') {
     renderKrajeTable();
     renderKrajeStats();
+  } else if (currentCat === 'clubs-db') {
+    renderClubsDbFilters();
+    renderClubsDbStats();
+    renderClubsDbTable();
+  } else if (currentCat === 'disciplines') {
+    renderDisciplinesFilters();
+    renderDisciplinesStats();
+    renderDisciplinesTable();
   } else {
     const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
     const clubs = aggregate(filtered);
@@ -823,6 +960,265 @@ function renderKrajeStats() {
     <div class="stat-card"><div class="val">${totalFinals}</div><div class="lbl">Finálových umístění</div></div>
     <div class="stat-card"><div class="val">${kasGroups[0]?.kraj || '–'}</div><div class="lbl">1. místo</div></div>
   `;
+}
+
+// ─── CLUBS DATABASE TAB ─────────────────────────────────────────────────────
+function getFilteredClubsDb() {
+  let data = [...clubsDatabase];
+  
+  // Filter by search term
+  if (clubSearchTerm) {
+    const term = normalizeClubName(clubSearchTerm);
+    data = data.filter(c => 
+      normalizeClubName(c.nazev || '').includes(term) ||
+      normalizeClubName(c.zkratka || '').includes(term) ||
+      normalizeClubName(c.kontakt || '').includes(term) ||
+      normalizeClubName(c.adresa || '').includes(term)
+    );
+  }
+  
+  // Filter by region
+  if (selectedClubRegion !== 'all') {
+    data = data.filter(c => c.kraj === selectedClubRegion);
+  }
+  
+  // Sort
+  if (clubSortCol) {
+    data.sort((a, b) => {
+      const valA = (a[clubSortCol] || '').toLowerCase();
+      const valB = (b[clubSortCol] || '').toLowerCase();
+      const cmp = valA.localeCompare(valB, 'cs');
+      return clubSortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+  
+  return data;
+}
+
+function renderClubsDbFilters() {
+  const filtersBar = document.getElementById('filtersBar');
+  filtersBar.style.display = 'flex';
+  
+  const regions = [...new Set(clubsDatabase.map(c => c.kraj))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'cs'));
+  
+  filtersBar.innerHTML = `
+    <input type="text" class="filter-input" id="clubSearchInput" placeholder="🔍 Hledat klub..." value="${clubSearchTerm}">
+    <select class="filter-select" id="clubRegionSelect">
+      <option value="all">Všechny kraje</option>
+      ${regions.map(r => `<option value="${r}" ${selectedClubRegion === r ? 'selected' : ''}>${r}</option>`).join('')}
+    </select>
+  `;
+  
+  document.getElementById('clubSearchInput').addEventListener('input', e => {
+    clubSearchTerm = e.target.value;
+    renderClubsDbStats();
+    renderClubsDbTable();
+  });
+  
+  document.getElementById('clubRegionSelect').addEventListener('change', e => {
+    selectedClubRegion = e.target.value;
+    renderClubsDbStats();
+    renderClubsDbTable();
+  });
+}
+
+function renderClubsDbStats() {
+  const filtered = getFilteredClubsDb();
+  const statsRow = document.getElementById('statsRow');
+  statsRow.innerHTML = `
+    <div class="stat-card"><div class="val">${clubsDatabase.length}</div><div class="lbl">Klubů v databázi</div></div>
+    <div class="stat-card"><div class="val">${filtered.length}</div><div class="lbl">Zobrazených klubů</div></div>
+  `;
+}
+
+function renderClubsDbTable() {
+  const thead = document.getElementById('tableHead');
+  thead.innerHTML = `
+    <tr>
+      <th class="sortable ${clubSortCol === 'zkratka' ? clubSortDir : ''}" onclick="sortClubsDb('zkratka')">Zkratka</th>
+      <th class="sortable ${clubSortCol === 'nazev' ? clubSortDir : ''}" onclick="sortClubsDb('nazev')" style="text-align:left;padding-left:16px">Název</th>
+      <th class="sortable ${clubSortCol === 'kraj' ? clubSortDir : ''}" onclick="sortClubsDb('kraj')">Kraj</th>
+      <th>Kontakt</th>
+      <th style="text-align:left">Adresa</th>
+    </tr>
+  `;
+  
+  const filtered = getFilteredClubsDb();
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  
+  filtered.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.zkratka || ''}</td>
+      <td style="text-align:left;padding-left:16px">${c.nazev || ''}</td>
+      <td>${c.kraj || ''}</td>
+      <td>${c.kontakt || ''}</td>
+      <td style="text-align:left">${c.adresa || ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function sortClubsDb(col) {
+  if (clubSortCol === col) {
+    clubSortDir = clubSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    clubSortCol = col;
+    clubSortDir = 'asc';
+  }
+  renderClubsDbTable();
+}
+
+// ─── DISCIPLINES TAB ────────────────────────────────────────────────────────
+function getFilteredDisciplines() {
+  let data = [...allAthleteResults];
+  
+  // Filter to top 8 unless showAll is enabled
+  if (!showAllDisciplineResults) {
+    data = data.filter(r => r.place <= 8);
+  }
+  
+  // Filter by search term
+  if (disciplineSearchTerm) {
+    const term = normalizeClubName(disciplineSearchTerm);
+    data = data.filter(r =>
+      normalizeClubName(r.disc || '').includes(term) ||
+      normalizeClubName(r.athlete || '').includes(term) ||
+      normalizeClubName(r.club || '').includes(term)
+    );
+  }
+  
+  // Filter by discipline
+  if (selectedDiscipline !== 'all') {
+    data = data.filter(r => r.disc === selectedDiscipline);
+  }
+  
+  // Filter by gender
+  if (selectedDisciplineGender !== 'all') {
+    data = data.filter(r => r.gender === selectedDisciplineGender);
+  }
+  
+  // Sort
+  if (discSortCol) {
+    data.sort((a, b) => {
+      let valA, valB;
+      if (discSortCol === 'place' || discSortCol === 'points') {
+        valA = a[discSortCol] || 0;
+        valB = b[discSortCol] || 0;
+        return discSortDir === 'asc' ? valA - valB : valB - valA;
+      } else {
+        valA = (a[discSortCol] || '').toLowerCase();
+        valB = (b[discSortCol] || '').toLowerCase();
+        const cmp = valA.localeCompare(valB, 'cs');
+        return discSortDir === 'asc' ? cmp : -cmp;
+      }
+    });
+  }
+  
+  return data;
+}
+
+function renderDisciplinesFilters() {
+  const filtersBar = document.getElementById('filtersBar');
+  filtersBar.style.display = 'flex';
+  
+  const disciplines = [...new Set(allAthleteResults.map(r => r.disc))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'cs'));
+  const genders = [...new Set(allAthleteResults.map(r => r.gender))].filter(Boolean).sort();
+  
+  filtersBar.innerHTML = `
+    <input type="text" class="filter-input" id="discSearchInput" placeholder="🔍 Hledat..." value="${disciplineSearchTerm}">
+    <select class="filter-select" id="discSelect">
+      <option value="all">Všechny disciplíny</option>
+      ${disciplines.map(d => `<option value="${d}" ${selectedDiscipline === d ? 'selected' : ''}>${d}</option>`).join('')}
+    </select>
+    <select class="filter-select" id="discGenderSelect">
+      <option value="all">Všechny kategorie</option>
+      ${genders.map(g => `<option value="${g}" ${selectedDisciplineGender === g ? 'selected' : ''}>${g}</option>`).join('')}
+    </select>
+    <label class="toggle-label">
+      <input type="checkbox" id="showAllToggle" ${showAllDisciplineResults ? 'checked' : ''}>
+      Zobrazit všechny výsledky
+    </label>
+  `;
+  
+  document.getElementById('discSearchInput').addEventListener('input', e => {
+    disciplineSearchTerm = e.target.value;
+    renderDisciplinesStats();
+    renderDisciplinesTable();
+  });
+  
+  document.getElementById('discSelect').addEventListener('change', e => {
+    selectedDiscipline = e.target.value;
+    renderDisciplinesStats();
+    renderDisciplinesTable();
+  });
+  
+  document.getElementById('discGenderSelect').addEventListener('change', e => {
+    selectedDisciplineGender = e.target.value;
+    renderDisciplinesStats();
+    renderDisciplinesTable();
+  });
+  
+  document.getElementById('showAllToggle').addEventListener('change', e => {
+    showAllDisciplineResults = e.target.checked;
+    renderDisciplinesStats();
+    renderDisciplinesTable();
+  });
+}
+
+function renderDisciplinesStats() {
+  const filtered = getFilteredDisciplines();
+  const uniqueDiscs = new Set(filtered.map(r => r.disc)).size;
+  const statsRow = document.getElementById('statsRow');
+  statsRow.innerHTML = `
+    <div class="stat-card"><div class="val">${uniqueDiscs}</div><div class="lbl">Počet disciplín</div></div>
+    <div class="stat-card"><div class="val">${filtered.length}</div><div class="lbl">Zobrazených výsledků</div></div>
+  `;
+}
+
+function renderDisciplinesTable() {
+  const thead = document.getElementById('tableHead');
+  thead.innerHTML = `
+    <tr>
+      <th class="sortable ${discSortCol === 'disc' ? discSortDir : ''}" onclick="sortDisc('disc')" style="text-align:left;padding-left:16px">Disciplína</th>
+      <th>Kategorie</th>
+      <th class="sortable ${discSortCol === 'place' ? discSortDir : ''}" onclick="sortDisc('place')">Umístění</th>
+      <th class="sortable ${discSortCol === 'athlete' ? discSortDir : ''}" onclick="sortDisc('athlete')" style="text-align:left">Závodník</th>
+      <th class="sortable ${discSortCol === 'club' ? discSortDir : ''}" onclick="sortDisc('club')" style="text-align:left">Oddíl</th>
+      <th>Kraj</th>
+      <th class="sortable ${discSortCol === 'points' ? discSortDir : ''}" onclick="sortDisc('points')">Body</th>
+    </tr>
+  `;
+  
+  const filtered = getFilteredDisciplines();
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  
+  filtered.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.place <= 3) tr.className = 'rank-' + r.place;
+    tr.innerHTML = `
+      <td style="text-align:left;padding-left:16px">${r.disc || ''}</td>
+      <td>${r.gender || ''}</td>
+      <td class="rank-cell">${r.place}</td>
+      <td style="text-align:left">${r.athlete || ''}</td>
+      <td style="text-align:left">${r.club || ''}</td>
+      <td>${r.kraj || ''}</td>
+      <td class="points-cell">${r.points > 0 ? fmtPts(r.points) : '–'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function sortDisc(col) {
+  if (discSortCol === col) {
+    discSortDir = discSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    discSortCol = col;
+    discSortDir = col === 'points' || col === 'place' ? 'asc' : 'asc';
+  }
+  renderDisciplinesTable();
 }
 
 // ─── RENDER CLUBS TABLE (restore header for clubs view) ─────────────────────
@@ -1043,6 +1439,7 @@ function handleFile(file) {
 (async function initApp() {
   // Load club database before allowing file uploads
   await loadKasMapFromCsv();
+  await loadClubsDatabase();
   
   document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
 
