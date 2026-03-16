@@ -110,8 +110,6 @@ main { max-width: 1400px; margin: 0 auto; padding: 40px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  overflow: hidden;
-  overflow-x: auto;
 }
 table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
 thead th {
@@ -122,6 +120,9 @@ thead th {
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 thead th:nth-child(2) { text-align: left; padding-left: 16px; }
 tbody tr { border-bottom: 1px solid rgba(37,42,61,0.5); transition: background 0.15s; }
@@ -248,6 +249,69 @@ tbody tr.rank-3 .rank-cell { color: var(--bronze); }
 .sortable.desc::after { content: ' ↓'; opacity: 1; }
 
 footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78rem; }
+
+/* Competition config form */
+.config-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px 32px;
+  margin-bottom: 24px;
+}
+.config-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 20px; }
+.config-grid {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr;
+  gap: 16px;
+  align-items: end;
+}
+@media (max-width: 700px) { .config-grid { grid-template-columns: 1fr; } }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label {
+  font-size: 0.75rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.form-group input[type=text],
+.form-group select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.form-group input[type=text]::placeholder { color: var(--muted); opacity: 0.6; }
+.form-group input[type=text]:focus,
+.form-group select:focus { outline: none; border-color: var(--accent); }
+.form-group select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7399' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; cursor: pointer; }
+
+/* Upload disabled state */
+.upload-zone.upload-disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Competition summary bar */
+.comp-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(79,124,255,0.10), rgba(124,79,255,0.06));
+  border: 1px solid rgba(79,124,255,0.22);
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 24px;
+  font-size: 0.875rem;
+  flex-wrap: wrap;
+}
+.comp-summary .cs-name { font-weight: 700; color: var(--text); }
+.comp-summary .cs-sep { color: var(--border); }
+.comp-summary .cs-detail { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -262,9 +326,49 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 
 <main>
 
+  <!-- Competition config -->
+  <div class="config-card">
+    <h3>Konfigurace závodu</h3>
+    <div class="config-grid">
+      <div class="form-group">
+        <label for="cfgNazev">Název závodu</label>
+        <input type="text" id="cfgNazev" placeholder="např. Přebor Prahy 2025" oninput="onConfigChange()">
+      </div>
+      <div class="form-group">
+        <label for="cfgTyp">Typ závodu</label>
+        <select id="cfgTyp" onchange="onConfigChange()">
+          <option value="">— vyberte typ —</option>
+          <option value="Mistrovství ČR">Mistrovství ČR</option>
+          <option value="Krajský přebor">Krajský přebor</option>
+          <option value="Sloučené krajské přebory">Sloučené krajské přebory</option>
+        </select>
+      </div>
+      <div class="form-group" id="cfgKrajGroup" style="display:none;">
+        <label for="cfgKraj">Kraj</label>
+        <select id="cfgKraj" onchange="onConfigChange()">
+          <option value="">— vyberte kraj —</option>
+          <option>Pražský</option>
+          <option>Středočeský</option>
+          <option>Jihočeský</option>
+          <option>Plzeňský</option>
+          <option>Karlovarský</option>
+          <option>Ústecký</option>
+          <option>Liberecký</option>
+          <option>Královéhradecký</option>
+          <option>Pardubický</option>
+          <option>Vysočina</option>
+          <option>Jihomoravský</option>
+          <option>Olomoucký</option>
+          <option>Zlínský</option>
+          <option>Moravskoslezský</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <!-- Upload -->
-  <div class="upload-zone" id="uploadZone">
-    <input type="file" id="fileInput" accept=".xlsx,.xls">
+  <div class="upload-zone upload-disabled" id="uploadZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" disabled>
     <div class="upload-icon">📂</div>
     <h2>Nahrajte soubor s výsledky</h2>
     <p>Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr</p>
@@ -287,6 +391,8 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 
   <!-- Results -->
   <div id="resultsSection">
+
+    <div class="comp-summary" id="compSummary" style="display:none;"></div>
 
     <div class="results-header">
       <div class="results-title">
@@ -456,6 +562,54 @@ function extractCategory(disc) {
     if (d.includes(cat.toLowerCase())) return cat;
   }
   return 'Muži'; // fallback
+}
+
+// ─── COMPETITION CONFIG ──────────────────────────────────────────────────────
+let competitionConfig = { nazev: '', typ: '', kraj: '' };
+
+function onConfigChange() {
+  const nazev = document.getElementById('cfgNazev').value.trim();
+  const typ   = document.getElementById('cfgTyp').value;
+  const krajGroup = document.getElementById('cfgKrajGroup');
+  const krajEl    = document.getElementById('cfgKraj');
+
+  const needsKraj = typ === 'Krajský přebor' || typ === 'Sloučené krajské přebory';
+  krajGroup.style.display = needsKraj ? '' : 'none';
+  if (!needsKraj) krajEl.value = '';
+
+  const kraj = needsKraj ? krajEl.value : '';
+  const valid = nazev !== '' && typ !== '' && (!needsKraj || kraj !== '');
+
+  competitionConfig = { nazev, typ, kraj };
+
+  const zone = document.getElementById('uploadZone');
+  if (valid) {
+    zone.classList.remove('upload-disabled');
+    document.getElementById('fileInput').disabled = false;
+  } else {
+    zone.classList.add('upload-disabled');
+    document.getElementById('fileInput').disabled = true;
+  }
+
+  // Update browser tab title as user types
+  document.title = nazev ? nazev + ' · Bodování klubů' : 'Bodování klubů';
+}
+
+function safeFilename(s) {
+  return s.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'bodovani_klubu';
+}
+
+function showCompSummary() {
+  const { nazev, typ, kraj } = competitionConfig;
+  const bar = document.getElementById('compSummary');
+  if (!nazev) { bar.style.display = 'none'; return; }
+  const parts = [
+    `<span class="cs-name">${nazev}</span>`,
+    `<span class="cs-sep">·</span><span class="cs-detail">${typ}</span>`,
+    kraj ? `<span class="cs-sep">·</span><span class="cs-detail">${kraj}</span>` : ''
+  ];
+  bar.innerHTML = parts.join(' ');
+  bar.style.display = 'flex';
 }
 
 // ─── GLOBALS ────────────────────────────────────────────────────────────────
@@ -1330,7 +1484,7 @@ function exportCSV() {
   const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\r\n');
   const dataUri = 'data:text/csv;charset=utf-8,\ufeff' + encodeURIComponent(csv);
   const a = document.createElement('a');
-  a.href = dataUri; a.download = 'bodovani_klubu.csv';
+  a.href = dataUri; a.download = safeFilename(competitionConfig.nazev || 'bodovani_klubu') + '.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
@@ -1434,7 +1588,7 @@ function exportXLSX() {
   XLSX.utils.book_append_sheet(wb, ws3, 'Kluby podle krajů');
   
   // Generate and download
-  XLSX.writeFile(wb, 'bodovani_klubu.xlsx');
+  XLSX.writeFile(wb, safeFilename(competitionConfig.nazev || 'bodovani_klubu') + '.xlsx');
 }
 
 
@@ -1463,6 +1617,7 @@ function handleFile(file) {
         renderTable(clubs);
         setStatus(5,'done');
         setTimeout(() => {
+          showCompSummary();
           document.getElementById('resultsSection').style.display = 'block';
         }, 300);
       } catch(err) {
