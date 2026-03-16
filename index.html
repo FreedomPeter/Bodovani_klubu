@@ -342,6 +342,16 @@ function normalizeClubName(name) {
     .trim();
 }
 
+// ─── STRIP RELAY TEAM SUFFIX ────────────────────────────────────────────────
+// Removes relay team suffixes like " A", " B", " C", etc. from club names
+// so that relay teams are counted towards the main club
+function stripRelayTeamSuffix(clubName) {
+  if (!clubName) return '';
+  // Match " A", " B", " C", " D", " E", " F" at the end of the string (case insensitive)
+  // This handles relay teams like "PSK Olymp Praha, z.s. A" -> "PSK Olymp Praha, z.s."
+  return clubName.replace(/\s+[A-Fa-f]$/i, '').trim();
+}
+
 // ─── PARSE CSV WITH QUOTED VALUES ───────────────────────────────────────────
 function parseCSV(text) {
   const lines = text.split('\n');
@@ -408,7 +418,10 @@ async function loadKasMapFromCsv() {
 
 // ─── GET KRAJ FOR CLUB ──────────────────────────────────────────────────────
 function getKrajForClub(clubName) {
-  const normalized = normalizeClubName(clubName);
+  // Strip relay team suffix: a space followed by a single uppercase letter at the end
+  // e.g. "PSK Olymp Praha, z.s. A" → "PSK Olymp Praha, z.s."
+  const stripped = clubName ? clubName.replace(/ [A-Z]$/, '') : clubName;
+  const normalized = normalizeClubName(stripped);
   return KAS_MAP[normalized] || 'Neznámý';
 }
 
@@ -426,6 +439,24 @@ async function loadClubsDatabase() {
 
 // ─── POINTS TABLE ───────────────────────────────────────────────────────────
 const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
+
+// ─── CATEGORY DETECTION ─────────────────────────────────────────────────────
+const CATEGORY_ORDER = [
+  'Muži','Ženy','U23 muži','U23 ženy','Junioři','Juniorky',
+  'Dorostenci','Dorostenky','Žáci','Žákyně','Ml. žáci','Mladší žákyně',
+  'Atletická přípravka-hoši','Atletická přípravka-dívky',
+  'Atletická minipřípravka-hoši','Atletická minipřípravka-dívky'
+];
+// Sort by descending length so longer (more specific) names match first
+const CATEGORY_MATCH_ORDER = [...CATEGORY_ORDER].sort((a,b) => b.length - a.length);
+
+function extractCategory(disc) {
+  const d = disc.toLowerCase();
+  for (const cat of CATEGORY_MATCH_ORDER) {
+    if (d.includes(cat.toLowerCase())) return cat;
+  }
+  return 'Muži'; // fallback
+}
 
 // ─── GLOBALS ────────────────────────────────────────────────────────────────
 let allResults = []; // {disc, gender, club, kraj, place, points, athlete}
@@ -503,11 +534,15 @@ function processFile(wb) {
 
   // 1. Remove combined-event sub-discipline rows (Body column has a numeric value > 0)
   //    Keep sedmiboj/pětiboj overall result rows (Body is null)
+  //    Also exclude rows where Pořadí is "MS" (case-insensitive)
   const filtered = rows.filter(r => {
     const body = r['Body'];
     // Filter out rows where Body is a real numeric value (combined-event sub-disciplines)
     // Must check body is not null/empty/whitespace first — Number(null)==0 and Number('')==0, both not NaN
     if (body !== null && body !== undefined && String(body).trim() !== '' && !isNaN(Number(body))) return false;
+    // Exclude rows with MS in the Pořadí column at ingestion level
+    const poradi = r['Pořadí'];
+    if (poradi !== null && poradi !== undefined && String(poradi).trim().toUpperCase() === 'MS') return false;
     return true;
   });
 
@@ -543,9 +578,8 @@ function getPhaseType(faze) {
 
 // Returns array of {disc, club, kraj, place, points}
 function processDiscipine(disc, rows) {
-  // Build a quick category label from discipline name (Muži/Ženy)
-  let gender = 'Muži';
-  if (disc.toLowerCase().includes('ženy') || disc.toLowerCase().includes('žen')) gender = 'Ženy';
+  // Detect category from discipline name
+  let gender = extractCategory(disc);
 
   const phases = [...new Set(rows.map(r => r['Fáze']))];
   const phaseTypes = phases.map(p => getPhaseType(p));
@@ -563,7 +597,7 @@ function processDiscipine(disc, rows) {
     finalAthletes = rows
       .filter(r => r['Pořadí'] !== null && r['Pořadí'] !== undefined)
       .map(r => ({
-        club: r['Oddíl/stát'],
+        club: stripRelayTeamSuffix(r['Oddíl/stát']),
         athlete: r['Závodník'] || '',
         place: parsePlacard(r['Pořadí']),
         výkon: r['Výkon'],
@@ -586,7 +620,7 @@ function processDiscipine(disc, rows) {
 
     // Build final athletes with their places
     let fa = finalRows.map(r => ({
-      club: r['Oddíl/stát'],
+      club: stripRelayTeamSuffix(r['Oddíl/stát']),
       athlete: r['Závodník'],
       place: parsePlacard(r['Pořadí']),
       výkon: r['Výkon'],
@@ -610,7 +644,7 @@ function processDiscipine(disc, rows) {
           .filter(r => !finalistClubs.has(r['Závodník']))
           .filter(r => !isNonFinish(r['Výkon']) && parseTime(String(r['Výkon'])) !== null)
           .map(r => ({
-            club: r['Oddíl/stát'],
+            club: stripRelayTeamSuffix(r['Oddíl/stát']),
             athlete: r['Závodník'],
             výkon: r['Výkon'],
             time: parseTime(String(r['Výkon']))
@@ -659,11 +693,11 @@ function buildDoubleFinalRanking(rows) {
   const invalid = [];
   for (const r of finalRows) {
     if (isNonFinish(r['Výkon'])) {
-      invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+      invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
     } else {
       const t = parseTime(String(r['Výkon']));
-      if (t !== null) valid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
-      else invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+      if (t !== null) valid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
+      else invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
     }
   }
   valid.sort((a,b) => a.time - b.time);
@@ -679,11 +713,11 @@ function buildBehRanking(rows) {
   const invalid = [];
   for (const r of rows) {
     if (isNonFinish(r['Výkon'])) {
-      invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+      invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
     } else {
       const t = parseTime(String(r['Výkon']));
-      if (t !== null) valid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
-      else invalid.push({ club: r['Oddíl/stát'], athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+      if (t !== null) valid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], time: t, nonFinish: false });
+      else invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
     }
   }
   // Deduplicate by athlete name (keep best)
@@ -815,10 +849,15 @@ function renderStats(clubs) {
 
 // ─── TABS ──────────────────────────────────────────────────────────────────
 function buildTabs() {
-  const genders = [...new Set(allResults.map(r => r.gender))].sort();
+  const presentCats = new Set(allResults.map(r => r.gender));
+  // Order by canonical list; append any unknown categories at the end
+  const orderedCats = CATEGORY_ORDER.filter(cat => presentCats.has(cat));
+  for (const cat of presentCats) {
+    if (!CATEGORY_ORDER.includes(cat)) orderedCats.push(cat);
+  }
   const tabs = document.getElementById('tabs');
   tabs.innerHTML = '<div class="tab active" data-cat="all" onclick="switchTab(this)">Celkem</div>';
-  for (const g of genders) {
+  for (const g of orderedCats) {
     const t = document.createElement('div');
     t.className = 'tab';
     t.dataset.cat = g;
