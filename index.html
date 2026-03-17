@@ -312,6 +312,42 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 .comp-summary .cs-name { font-weight: 700; color: var(--text); }
 .comp-summary .cs-sep { color: var(--border); }
 .comp-summary .cs-detail { color: var(--muted); }
+
+/* Multi-kraj checkbox group */
+.kraje-multi-group {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.kraje-multi-group .multi-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.kraje-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.kraje-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--text);
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.15s;
+  user-select: none;
+}
+.kraje-checkboxes label:hover { border-color: var(--accent); background: rgba(79,124,255,0.06); }
+.kraje-checkboxes input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
 </style>
 </head>
 <body>
@@ -362,6 +398,25 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
           <option>Zlínský</option>
           <option>Moravskoslezský</option>
         </select>
+      </div>
+    </div>
+    <div id="cfgKrajeMultiGroup" class="kraje-multi-group" style="display:none;">
+      <span class="multi-label">Kraje (vyberte alespoň jeden)</span>
+      <div class="kraje-checkboxes">
+        <label><input type="checkbox" value="Pražský" onchange="onConfigChange()"> Pražský</label>
+        <label><input type="checkbox" value="Středočeský" onchange="onConfigChange()"> Středočeský</label>
+        <label><input type="checkbox" value="Jihočeský" onchange="onConfigChange()"> Jihočeský</label>
+        <label><input type="checkbox" value="Plzeňský" onchange="onConfigChange()"> Plzeňský</label>
+        <label><input type="checkbox" value="Karlovarský" onchange="onConfigChange()"> Karlovarský</label>
+        <label><input type="checkbox" value="Ústecký" onchange="onConfigChange()"> Ústecký</label>
+        <label><input type="checkbox" value="Liberecký" onchange="onConfigChange()"> Liberecký</label>
+        <label><input type="checkbox" value="Královéhradecký" onchange="onConfigChange()"> Královéhradecký</label>
+        <label><input type="checkbox" value="Pardubický" onchange="onConfigChange()"> Pardubický</label>
+        <label><input type="checkbox" value="Vysočina" onchange="onConfigChange()"> Vysočina</label>
+        <label><input type="checkbox" value="Jihomoravský" onchange="onConfigChange()"> Jihomoravský</label>
+        <label><input type="checkbox" value="Olomoucký" onchange="onConfigChange()"> Olomoucký</label>
+        <label><input type="checkbox" value="Zlínský" onchange="onConfigChange()"> Zlínský</label>
+        <label><input type="checkbox" value="Moravskoslezský" onchange="onConfigChange()"> Moravskoslezský</label>
       </div>
     </div>
   </div>
@@ -565,22 +620,32 @@ function extractCategory(disc) {
 }
 
 // ─── COMPETITION CONFIG ──────────────────────────────────────────────────────
-let competitionConfig = { nazev: '', typ: '', kraj: '' };
+let competitionConfig = { nazev: '', typ: '', kraj: '', krajeList: [] };
 
 function onConfigChange() {
   const nazev = document.getElementById('cfgNazev').value.trim();
   const typ   = document.getElementById('cfgTyp').value;
-  const krajGroup = document.getElementById('cfgKrajGroup');
-  const krajEl    = document.getElementById('cfgKraj');
+  const krajGroup      = document.getElementById('cfgKrajGroup');
+  const krajEl         = document.getElementById('cfgKraj');
+  const krajeMultiGroup = document.getElementById('cfgKrajeMultiGroup');
 
-  const needsKraj = typ === 'Krajský přebor' || typ === 'Sloučené krajské přebory';
-  krajGroup.style.display = needsKraj ? '' : 'none';
-  if (!needsKraj) krajEl.value = '';
+  const isSingle   = typ === 'Krajský přebor';
+  const isSloucene = typ === 'Sloučené krajské přebory';
 
-  const kraj = needsKraj ? krajEl.value : '';
-  const valid = nazev !== '' && typ !== '' && (!needsKraj || kraj !== '');
+  krajGroup.style.display      = isSingle   ? '' : 'none';
+  krajeMultiGroup.style.display = isSloucene ? '' : 'none';
+  if (!isSingle) krajEl.value = '';
 
-  competitionConfig = { nazev, typ, kraj };
+  const kraj      = isSingle   ? krajEl.value : '';
+  const krajeList = isSloucene
+    ? [...krajeMultiGroup.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.value)
+    : [];
+
+  const valid = nazev !== '' && typ !== ''
+    && (!isSingle   || kraj !== '')
+    && (!isSloucene || krajeList.length >= 1);
+
+  competitionConfig = { nazev, typ, kraj, krajeList };
 
   const zone = document.getElementById('uploadZone');
   if (valid) {
@@ -591,7 +656,6 @@ function onConfigChange() {
     document.getElementById('fileInput').disabled = true;
   }
 
-  // Update browser tab title as user types
   document.title = nazev ? nazev + ' · Bodování klubů' : 'Bodování klubů';
 }
 
@@ -600,15 +664,13 @@ function safeFilename(s) {
 }
 
 function showCompSummary() {
-  const { nazev, typ, kraj } = competitionConfig;
+  const { nazev, typ, kraj, krajeList } = competitionConfig;
   const bar = document.getElementById('compSummary');
   if (!nazev) { bar.style.display = 'none'; return; }
-  const parts = [
-    `<span class="cs-name">${nazev}</span>`,
-    `<span class="cs-sep">·</span><span class="cs-detail">${typ}</span>`,
-    kraj ? `<span class="cs-sep">·</span><span class="cs-detail">${kraj}</span>` : ''
-  ];
-  bar.innerHTML = parts.join(' ');
+  let detail = typ;
+  if (typ === 'Krajský přebor' && kraj) detail += ` – ${kraj}`;
+  else if (typ === 'Sloučené krajské přebory' && krajeList.length > 0) detail += `: ${krajeList.join(', ')}`;
+  bar.innerHTML = `<span class="cs-name">${nazev}</span> <span class="cs-sep">·</span> <span class="cs-detail">${detail}</span>`;
   bar.style.display = 'flex';
 }
 
@@ -828,10 +890,29 @@ function processDiscipine(disc, rows) {
   }
 
   // 3. Assign points with tie averaging (top 8 only)
-  const pointsResults = assignPointsToAthletes(finalAthletes, disc, gender);
+  let pointsResults;
+  if (competitionConfig.typ === 'Sloučené krajské přebory' && competitionConfig.krajeList.length > 0) {
+    // Score separately per selected kraj using krajové placement
+    pointsResults = [];
+    for (const kraj of competitionConfig.krajeList) {
+      const krajAthletes = finalAthletes.filter(a => getKrajForClub(a.club) === kraj);
+      const reranked = reRankForKraj(krajAthletes);
+      const krajPoints = assignPointsToAthletes(reranked, disc, gender);
+      krajPoints.forEach(r => { r.krajTab = kraj; });
+      pointsResults.push(...krajPoints);
+    }
+  } else {
+    pointsResults = assignPointsToAthletes(finalAthletes, disc, gender);
+  }
+
   // 4. Build full athlete results for Disciplíny tab
   const fullResults = buildFullAthleteResults(finalAthletes, disc, gender);
-  
+  // Mark athletes outside selected kraje so Disciplíny tab can display them appropriately
+  if (competitionConfig.typ === 'Sloučené krajské přebory' && competitionConfig.krajeList.length > 0) {
+    const selectedSet = new Set(competitionConfig.krajeList);
+    fullResults.forEach(r => { if (!selectedSet.has(r.kraj)) { r.mimoKraj = true; r.points = 0; } });
+  }
+
   return { pointsResults, fullResults };
 }
 
@@ -884,6 +965,29 @@ function buildBehRanking(rows) {
   const combined = [...unique, ...invalid];
   combined.forEach((a,i) => { a.place = i+1; });
   return combined;
+}
+
+// Re-rank a kraj-filtered subset of athletes, preserving relative order and global tie groups.
+// Returns a new array with krajové place values starting from 1.
+function reRankForKraj(athletes) {
+  const valid = athletes
+    .filter(a => a.place !== null && !a.nonFinish)
+    .sort((a, b) => a.place - b.place);
+  const invalid = athletes.filter(a => a.nonFinish || a.place === null);
+
+  const reranked = [];
+  let newPlace = 1;
+  let i = 0;
+  while (i < valid.length) {
+    const origPlace = valid[i].place;
+    let j = i;
+    while (j < valid.length && valid[j].place === origPlace) j++;
+    // Athletes globally tied stay tied krajově
+    for (let k = i; k < j; k++) reranked.push({ ...valid[k], place: newPlace });
+    newPlace += (j - i);
+    i = j;
+  }
+  return [...reranked, ...invalid.map(a => ({ ...a }))];
 }
 
 function assignPointsToAthletes(athletes, disc, gender) {
@@ -1019,6 +1123,18 @@ function buildTabs() {
     t.setAttribute('onclick', 'switchTab(this)');
     tabs.appendChild(t);
   }
+  // For Sloučené krajské přebory: one tab per selected kraj
+  if (competitionConfig.typ === 'Sloučené krajské přebory' && competitionConfig.krajeList.length > 0) {
+    for (const kraj of competitionConfig.krajeList) {
+      const t = document.createElement('div');
+      t.className = 'tab';
+      t.dataset.cat = 'sloucene-kraj-' + kraj;
+      t.textContent = kraj;
+      t.setAttribute('onclick', 'switchTab(this)');
+      tabs.appendChild(t);
+    }
+  }
+
   // Add Kraje tab
   const krajeTab = document.createElement('div');
   krajeTab.className = 'tab';
@@ -1063,6 +1179,12 @@ function switchTab(el) {
     renderDisciplinesFilters();
     renderDisciplinesStats();
     renderDisciplinesTable();
+  } else if (currentCat.startsWith('sloucene-kraj-')) {
+    const kraj = currentCat.slice('sloucene-kraj-'.length);
+    const filtered = allResults.filter(r => r.krajTab === kraj);
+    const clubs = aggregate(filtered);
+    renderTable(clubs);
+    renderStats(clubs);
   } else {
     const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
     const clubs = aggregate(filtered);
