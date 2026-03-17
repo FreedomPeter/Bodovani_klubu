@@ -101,7 +101,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 40px; }
 #resultsSection { display: none; margin-top: 32px; }
 .results-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 20px; flex-wrap: gap;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
 }
 .results-title h2 { font-size: 1.3rem; font-weight: 700; }
 .results-title p { font-size: 0.8rem; color: var(--muted); margin-top: 3px; }
@@ -348,6 +348,128 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 }
 .kraje-checkboxes label:hover { border-color: var(--accent); background: rgba(79,124,255,0.06); }
 .kraje-checkboxes input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+/* Kraj separator row in Disciplíny krajské mode */
+.kraj-sep-row { background: var(--surface2); }
+.kraj-sep-row td {
+  padding: 7px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-top: 1px solid var(--border);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RESPONSIVE
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Tablet (≤ 900 px) ─────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  header { padding: 16px 24px; }
+  main   { padding: 24px; }
+
+  .config-card  { padding: 22px 24px; }
+  .config-grid  { grid-template-columns: 1fr 1fr; }
+
+  /* Tables: horizontal scroll. Note: overflow-x on the same ancestor as
+     position:sticky conflicts (browsers auto-set overflow-y:auto which
+     breaks the sticky context). We accept non-sticky headers on ≤900 px. */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  thead th    { position: static; }
+
+  /* Tab bar: single scrollable strip, no wrapping */
+  .tabs {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
+}
+
+/* ── Mobile (≤ 640 px) ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  /* Header */
+  header    { padding: 12px 16px; gap: 10px; }
+  header h1 { font-size: 1.1rem; }
+  header p  { font-size: 0.73rem; }
+  .logo     { width: 36px; height: 36px; font-size: 18px; border-radius: 10px; }
+
+  /* Layout */
+  main { padding: 12px; }
+
+  /* Config */
+  .config-card  { padding: 16px 14px; }
+  .config-grid  { grid-template-columns: 1fr; }
+
+  /* Upload zone */
+  .upload-zone    { padding: 32px 16px; border-radius: 14px; }
+  .upload-zone h2 { font-size: 1.05rem; }
+  .upload-icon    { font-size: 2rem; margin-bottom: 10px; }
+
+  /* Results header: stack title + export buttons */
+  .results-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .export-btns    { width: 100%; }
+  .export-btns .btn {
+    flex: 1;
+    justify-content: center;
+    font-size: 0.8rem;
+    padding: 8px 10px;
+  }
+
+  /* Stat cards: two per row */
+  .stats-row  { gap: 8px; }
+  .stat-card  {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    padding: 12px 12px;
+  }
+  .stat-card .val { font-size: 1.25rem; }
+  .stat-card .lbl { font-size: 0.7rem; }
+
+  /* Tab pills: slightly smaller */
+  .tab { padding: 7px 12px; font-size: 0.78rem; }
+
+  /* Table cells: tighter padding and font */
+  thead th { font-size: 0.74rem; padding: 9px 6px; }
+  tbody td { padding: 8px 6px; font-size: 0.78rem; }
+  tbody td:nth-child(2) { padding-left: 10px; }
+  .rank-cell   { width: 28px; }
+  .points-cell { font-size: 0.85rem; }
+
+  /* Filters: full-width, stacked */
+  .filters-bar   { flex-direction: column; align-items: stretch; gap: 8px; }
+  .filter-input  { min-width: unset; width: 100%; }
+  .filter-select { width: 100%; }
+
+  /* Competition summary */
+  .comp-summary { font-size: 0.8rem; padding: 10px 14px; }
+
+  /* Kraj checkbox pills */
+  .kraje-checkboxes label { padding: 4px 9px; font-size: 0.8rem; }
+
+  /* Footer */
+  footer { padding: 20px 16px; font-size: 0.73rem; }
+}
+
+/* ── Very small (≤ 380 px) ─────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  main          { padding: 8px; }
+  .config-card  { padding: 14px 10px; }
+  .tab          { padding: 6px 10px; font-size: 0.73rem; }
+
+  /* Stat cards: full width stack */
+  .stat-card { flex: 1 1 100%; }
+
+  /* Export buttons: stack vertically */
+  .export-btns      { flex-direction: column; }
+  .export-btns .btn { width: 100%; }
+}
 </style>
 </head>
 <body>
@@ -604,7 +726,7 @@ const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
 // ─── CATEGORY DETECTION ─────────────────────────────────────────────────────
 const CATEGORY_ORDER = [
   'Muži','Ženy','U23 muži','U23 ženy','Junioři','Juniorky',
-  'Dorostenci','Dorostenky','Žáci','Žákyně','Ml. žáci','Mladší žákyně',
+  'Dorostenci','Dorostenky','Žáci','Žákyně','Ml. žáci','Ml. žákyně',
   'Atletická přípravka-hoši','Atletická přípravka-dívky',
   'Atletická minipřípravka-hoši','Atletická minipřípravka-dívky'
 ];
@@ -686,11 +808,16 @@ let selectedClubRegion = 'all';
 let clubSortCol = null;
 let clubSortDir = 'asc';
 
+// Category filter (sloučené mode only — replaces category tabs)
+let selectedCategoryFilter = 'all';
+
 // Disciplines state
 let disciplineSearchTerm = '';
 let selectedDiscipline = 'all';
 let selectedDisciplineGender = 'all';
 let showAllDisciplineResults = false;
+let showKrajskePoradiDisc = false;
+let selectedKrajDisc = 'all';
 let discSortCol = null;
 let discSortDir = 'asc';
 
@@ -1055,8 +1182,57 @@ function buildFullAthleteResults(athletes, disc, gender) {
       kraj: getKrajForClub(a.club),
       place: a.place,
       points: a.place <= 8 ? (PLACE_POINTS[a.place] || 0) : 0,
-      athlete: a.athlete || ''
+      athlete: a.athlete || '',
+      výkon: a.výkon != null ? String(a.výkon) : ''
     }));
+}
+
+// ─── KRAJSKÉ POŘADÍ DATA (for Disciplíny toggle) ────────────────────────────
+// Re-ranks athletes within each discipline per kraj, assigns krajové points.
+function computeKrajskePoradiData() {
+  const krajeList = competitionConfig.krajeList;
+  if (!krajeList || krajeList.length === 0) return [];
+
+  // Group allAthleteResults by disc+gender
+  const groups = {};
+  for (const r of allAthleteResults) {
+    const key = r.disc + '\x00' + r.gender;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+
+  const result = [];
+  for (const athletes of Object.values(groups)) {
+    for (const kraj of krajeList) {
+      const krajAthletes = athletes
+        .filter(a => a.kraj === kraj)
+        .sort((a, b) => a.place - b.place);
+      if (krajAthletes.length === 0) continue;
+
+      let newPlace = 1;
+      let i = 0;
+      while (i < krajAthletes.length) {
+        const origPlace = krajAthletes[i].place;
+        let j = i;
+        // Advance j to end of this global tie group
+        while (j < krajAthletes.length && krajAthletes[j].place === origPlace) j++;
+        const groupSize = j - i;
+        // Average points across occupied slots within top 8
+        let totalPts = 0;
+        for (let k = 0; k < groupSize; k++) {
+          const p = newPlace + k;
+          if (p <= 8) totalPts += PLACE_POINTS[p] || 0;
+        }
+        const avgPts = groupSize > 0 ? totalPts / groupSize : 0;
+        for (let k = i; k < j; k++) {
+          result.push({ ...krajAthletes[k], krajPlace: newPlace, points: avgPts, krajGroup: kraj });
+        }
+        newPlace += groupSize;
+        i = j;
+      }
+    }
+  }
+  return result;
 }
 
 // ─── AGGREGATION ─────────────────────────────────────────────────────────────
@@ -1105,69 +1281,83 @@ function renderStats(clubs) {
   `;
 }
 
+// ─── CATEGORY FILTER (sloučené mode) ────────────────────────────────────────
+function renderCategoryFilter() {
+  const filtersBar = document.getElementById('filtersBar');
+  filtersBar.style.display = 'flex';
+
+  const presentCats = CATEGORY_ORDER.filter(cat => allResults.some(r => r.gender === cat));
+  filtersBar.innerHTML = `
+    <select class="filter-select" id="categoryFilterSelect">
+      <option value="all">Všechny kategorie</option>
+      ${presentCats.map(c => `<option value="${c}" ${selectedCategoryFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+    </select>
+  `;
+
+  document.getElementById('categoryFilterSelect').addEventListener('change', e => {
+    selectedCategoryFilter = e.target.value;
+    renderMainTabContent();
+  });
+}
+
+// Renders the scoring table + stats for the currently active main tab,
+// applying the category dropdown filter (used in sloučené mode).
+function renderMainTabContent() {
+  let base;
+  if (currentCat.startsWith('sloucene-kraj-')) {
+    const kraj = currentCat.slice('sloucene-kraj-'.length);
+    base = allResults.filter(r => r.krajTab === kraj);
+  } else {
+    base = allResults;
+  }
+  const filtered = selectedCategoryFilter !== 'all'
+    ? base.filter(r => r.gender === selectedCategoryFilter)
+    : base;
+  const clubs = aggregate(filtered);
+  const hideKraj =
+    competitionConfig.typ === 'Krajský přebor' ||
+    (competitionConfig.typ === 'Sloučené krajské přebory' && currentCat.startsWith('sloucene-kraj-'));
+  renderTable(clubs, hideKraj);
+  renderStats(clubs);
+}
+
 // ─── TABS ──────────────────────────────────────────────────────────────────
 function buildTabs() {
-  const presentCats = new Set(allResults.map(r => r.gender));
-  // Order by canonical list; append any unknown categories at the end
-  const orderedCats = CATEGORY_ORDER.filter(cat => presentCats.has(cat));
-  for (const cat of presentCats) {
-    if (!CATEGORY_ORDER.includes(cat)) orderedCats.push(cat);
-  }
+  const isSloucene = competitionConfig.typ === 'Sloučené krajské přebory';
   const tabs = document.getElementById('tabs');
   tabs.innerHTML = '<div class="tab active" data-cat="all" onclick="switchTab(this)">Celkem</div>';
-  for (const g of orderedCats) {
+
+  function addTab(cat, label) {
     const t = document.createElement('div');
     t.className = 'tab';
-    t.dataset.cat = g;
-    t.textContent = g;
+    t.dataset.cat = cat;
+    t.textContent = label;
     t.setAttribute('onclick', 'switchTab(this)');
     tabs.appendChild(t);
   }
-  // For Sloučené krajské přebory: one tab per selected kraj
-  if (competitionConfig.typ === 'Sloučené krajské přebory' && competitionConfig.krajeList.length > 0) {
+
+  if (isSloucene) {
+    // Sloučené mode: kraj tabs replace Kraje tab
     for (const kraj of competitionConfig.krajeList) {
-      const t = document.createElement('div');
-      t.className = 'tab';
-      t.dataset.cat = 'sloucene-kraj-' + kraj;
-      t.textContent = kraj;
-      t.setAttribute('onclick', 'switchTab(this)');
-      tabs.appendChild(t);
+      addTab('sloucene-kraj-' + kraj, kraj);
     }
+  } else {
+    // All other modes: Kraje tab (categories moved to dropdown)
+    addTab('kraje', 'Kraje');
   }
 
-  // Add Kraje tab
-  const krajeTab = document.createElement('div');
-  krajeTab.className = 'tab';
-  krajeTab.dataset.cat = 'kraje';
-  krajeTab.textContent = 'Kraje';
-  krajeTab.setAttribute('onclick', 'switchTab(this)');
-  tabs.appendChild(krajeTab);
-  
-  // Add Databáze klubů tab
-  const clubsDbTab = document.createElement('div');
-  clubsDbTab.className = 'tab';
-  clubsDbTab.dataset.cat = 'clubs-db';
-  clubsDbTab.textContent = 'Databáze klubů';
-  clubsDbTab.setAttribute('onclick', 'switchTab(this)');
-  tabs.appendChild(clubsDbTab);
-  
-  // Add Disciplíny tab
-  const discTab = document.createElement('div');
-  discTab.className = 'tab';
-  discTab.dataset.cat = 'disciplines';
-  discTab.textContent = 'Disciplíny';
-  discTab.setAttribute('onclick', 'switchTab(this)');
-  tabs.appendChild(discTab);
+  addTab('clubs-db', 'Databáze klubů');
+  addTab('disciplines', 'Disciplíny');
 }
 
 function switchTab(el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   currentCat = el.dataset.cat;
-  
-  // Hide filters by default
+
+  // Hide filters by default (each branch re-shows as needed)
   document.getElementById('filtersBar').style.display = 'none';
-  
+
   if (currentCat === 'kraje') {
     renderKrajeTable();
     renderKrajeStats();
@@ -1179,17 +1369,10 @@ function switchTab(el) {
     renderDisciplinesFilters();
     renderDisciplinesStats();
     renderDisciplinesTable();
-  } else if (currentCat.startsWith('sloucene-kraj-')) {
-    const kraj = currentCat.slice('sloucene-kraj-'.length);
-    const filtered = allResults.filter(r => r.krajTab === kraj);
-    const clubs = aggregate(filtered);
-    renderTable(clubs);
-    renderStats(clubs);
   } else {
-    const filtered = currentCat === 'all' ? allResults : allResults.filter(r => r.gender === currentCat);
-    const clubs = aggregate(filtered);
-    renderTable(clubs);
-    renderStats(clubs);
+    // All main scoring tabs (Celkem + kraj tabs) use the category dropdown filter
+    renderCategoryFilter();
+    renderMainTabContent();
   }
 }
 
@@ -1387,13 +1570,14 @@ function sortClubsDb(col) {
 
 // ─── DISCIPLINES TAB ────────────────────────────────────────────────────────
 function getFilteredDisciplines() {
-  let data = [...allAthleteResults];
-  
+  const isKrajske = showKrajskePoradiDisc && competitionConfig.typ === 'Sloučené krajské přebory';
+  let data = isKrajske ? computeKrajskePoradiData() : [...allAthleteResults];
+
   // Filter to top 8 unless showAll is enabled
   if (!showAllDisciplineResults) {
-    data = data.filter(r => r.place <= 8);
+    data = data.filter(r => (isKrajske ? r.krajPlace : r.place) <= 8);
   }
-  
+
   // Filter by search term
   if (disciplineSearchTerm) {
     const term = normalizeClubName(disciplineSearchTerm);
@@ -1403,24 +1587,33 @@ function getFilteredDisciplines() {
       normalizeClubName(r.club || '').includes(term)
     );
   }
-  
+
   // Filter by discipline
   if (selectedDiscipline !== 'all') {
     data = data.filter(r => r.disc === selectedDiscipline);
   }
-  
+
   // Filter by gender
   if (selectedDisciplineGender !== 'all') {
     data = data.filter(r => r.gender === selectedDisciplineGender);
   }
-  
+
+  // Filter by kraj (only active in krajské mode)
+  if (isKrajske && selectedKrajDisc !== 'all') {
+    data = data.filter(r => r.krajGroup === selectedKrajDisc);
+  }
+
   // Sort
   if (discSortCol) {
     data.sort((a, b) => {
       let valA, valB;
-      if (discSortCol === 'place' || discSortCol === 'points') {
-        valA = a[discSortCol] || 0;
-        valB = b[discSortCol] || 0;
+      if (discSortCol === 'place') {
+        valA = isKrajske ? (a.krajPlace || 0) : (a.place || 0);
+        valB = isKrajske ? (b.krajPlace || 0) : (b.place || 0);
+        return discSortDir === 'asc' ? valA - valB : valB - valA;
+      } else if (discSortCol === 'points') {
+        valA = a.points || 0;
+        valB = b.points || 0;
         return discSortDir === 'asc' ? valA - valB : valB - valA;
       } else {
         valA = (a[discSortCol] || '').toLowerCase();
@@ -1429,8 +1622,17 @@ function getFilteredDisciplines() {
         return discSortDir === 'asc' ? cmp : -cmp;
       }
     });
+  } else if (isKrajske) {
+    // Default krajské sort: disc → krajGroup → krajPlace
+    data.sort((a, b) => {
+      const dc = (a.disc || '').localeCompare(b.disc || '', 'cs');
+      if (dc !== 0) return dc;
+      const kc = (a.krajGroup || '').localeCompare(b.krajGroup || '', 'cs');
+      if (kc !== 0) return kc;
+      return (a.krajPlace || 0) - (b.krajPlace || 0);
+    });
   }
-  
+
   return data;
 }
 
@@ -1441,6 +1643,10 @@ function renderDisciplinesFilters() {
   const disciplines = [...new Set(allAthleteResults.map(r => r.disc))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'cs'));
   const genders = [...new Set(allAthleteResults.map(r => r.gender))].filter(Boolean).sort();
   
+  const isSloucene = competitionConfig.typ === 'Sloučené krajské přebory';
+  const krajOptions = isSloucene
+    ? [...competitionConfig.krajeList].sort((a, b) => a.localeCompare(b, 'cs'))
+    : [];
   filtersBar.innerHTML = `
     <input type="text" class="filter-input" id="discSearchInput" placeholder="🔍 Hledat..." value="${disciplineSearchTerm}">
     <select class="filter-select" id="discSelect">
@@ -1451,10 +1657,18 @@ function renderDisciplinesFilters() {
       <option value="all">Všechny kategorie</option>
       ${genders.map(g => `<option value="${g}" ${selectedDisciplineGender === g ? 'selected' : ''}>${g}</option>`).join('')}
     </select>
+    ${showKrajskePoradiDisc && isSloucene ? `<select class="filter-select" id="discKrajSelect">
+      <option value="all">Všechny kraje</option>
+      ${krajOptions.map(k => `<option value="${k}" ${selectedKrajDisc === k ? 'selected' : ''}>${k}</option>`).join('')}
+    </select>` : ''}
     <label class="toggle-label">
       <input type="checkbox" id="showAllToggle" ${showAllDisciplineResults ? 'checked' : ''}>
       Zobrazit všechny výsledky
     </label>
+    ${isSloucene ? `<label class="toggle-label">
+      <input type="checkbox" id="krajskePoradiToggle" ${showKrajskePoradiDisc ? 'checked' : ''}>
+      Zobrazit krajské pořadí
+    </label>` : ''}
   `;
   
   document.getElementById('discSearchInput').addEventListener('input', e => {
@@ -1480,6 +1694,26 @@ function renderDisciplinesFilters() {
     renderDisciplinesStats();
     renderDisciplinesTable();
   });
+
+  const discKrajEl = document.getElementById('discKrajSelect');
+  if (discKrajEl) {
+    discKrajEl.addEventListener('change', e => {
+      selectedKrajDisc = e.target.value;
+      renderDisciplinesStats();
+      renderDisciplinesTable();
+    });
+  }
+
+  const krajskeEl = document.getElementById('krajskePoradiToggle');
+  if (krajskeEl) {
+    krajskeEl.addEventListener('change', e => {
+      showKrajskePoradiDisc = e.target.checked;
+      if (!showKrajskePoradiDisc) selectedKrajDisc = 'all';
+      renderDisciplinesFilters(); // re-render to show/hide kraj dropdown
+      renderDisciplinesStats();
+      renderDisciplinesTable();
+    });
+  }
 }
 
 function renderDisciplinesStats() {
@@ -1493,33 +1727,50 @@ function renderDisciplinesStats() {
 }
 
 function renderDisciplinesTable() {
+  const isKrajske = showKrajskePoradiDisc && competitionConfig.typ === 'Sloučené krajské přebory';
   const thead = document.getElementById('tableHead');
   thead.innerHTML = `
     <tr>
       <th class="sortable ${discSortCol === 'disc' ? discSortDir : ''}" onclick="sortDisc('disc')" style="text-align:left;padding-left:16px">Disciplína</th>
       <th>Kategorie</th>
-      <th class="sortable ${discSortCol === 'place' ? discSortDir : ''}" onclick="sortDisc('place')">Umístění</th>
+      <th class="sortable ${discSortCol === 'place' ? discSortDir : ''}" onclick="sortDisc('place')">${isKrajske ? 'Kraj. poř.' : 'Umístění'}</th>
       <th class="sortable ${discSortCol === 'athlete' ? discSortDir : ''}" onclick="sortDisc('athlete')" style="text-align:left">Závodník</th>
       <th class="sortable ${discSortCol === 'club' ? discSortDir : ''}" onclick="sortDisc('club')" style="text-align:left">Oddíl</th>
       <th>Kraj</th>
+      <th>Výkon</th>
       <th class="sortable ${discSortCol === 'points' ? discSortDir : ''}" onclick="sortDisc('points')">Body</th>
     </tr>
   `;
-  
+
   const filtered = getFilteredDisciplines();
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
-  
+
+  let prevGroupKey = null;
   filtered.forEach(r => {
+    // Insert kraj separator row when the (disc, krajGroup) pair changes
+    if (isKrajske) {
+      const groupKey = r.disc + '\x00' + r.krajGroup;
+      if (groupKey !== prevGroupKey) {
+        prevGroupKey = groupKey;
+        const sepTr = document.createElement('tr');
+        sepTr.className = 'kraj-sep-row';
+        sepTr.innerHTML = `<td colspan="8" style="text-align:left;padding-left:16px">${r.krajGroup}</td>`;
+        tbody.appendChild(sepTr);
+      }
+    }
+
+    const displayPlace = isKrajske ? r.krajPlace : r.place;
     const tr = document.createElement('tr');
-    if (r.place <= 3) tr.className = 'rank-' + r.place;
+    if (displayPlace <= 3) tr.className = 'rank-' + displayPlace;
     tr.innerHTML = `
       <td style="text-align:left;padding-left:16px">${r.disc || ''}</td>
       <td>${r.gender || ''}</td>
-      <td class="rank-cell">${r.place}</td>
+      <td class="rank-cell">${displayPlace}</td>
       <td style="text-align:left">${r.athlete || ''}</td>
       <td style="text-align:left">${r.club || ''}</td>
       <td>${r.kraj || ''}</td>
+      <td style="font-variant-numeric:tabular-nums;color:var(--muted)">${r.výkon || '–'}</td>
       <td class="points-cell">${r.points > 0 ? fmtPts(r.points) : '–'}</td>
     `;
     tbody.appendChild(tr);
@@ -1537,20 +1788,19 @@ function sortDisc(col) {
 }
 
 // ─── RENDER CLUBS TABLE (restore header for clubs view) ─────────────────────
-function renderTable(clubs) {
-  // Restore clubs table header
+function renderTable(clubs, hideKraj = false) {
   const thead = document.getElementById('tableHead');
   thead.innerHTML = `
     <tr>
       <th>Poř.</th>
       <th style="text-align:left;padding-left:16px">AO / AK</th>
-      <th>Kraj</th>
+      ${hideKraj ? '' : '<th>Kraj</th>'}
       <th>1.</th><th>2.</th><th>3.</th><th>4.</th><th>5.</th><th>6.</th><th>7.</th><th>8.</th>
       <th>Finálových umístění</th>
       <th>Body</th>
     </tr>
   `;
-  
+
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
   clubs.forEach((c, i) => {
@@ -1564,7 +1814,7 @@ function renderTable(clubs) {
     tr.innerHTML = `
       <td class="rank-cell">${rank}</td>
       <td>${c.club}</td>
-      <td>${c.kraj}</td>
+      ${hideKraj ? '' : `<td>${c.kraj}</td>`}
       ${placesCells}
       <td class="count-cell"><strong>${c.finals}</strong></td>
       <td class="points-cell">${fmtPts(c.total)}</td>
@@ -1733,10 +1983,10 @@ function handleFile(file) {
         const data = new Uint8Array(e.target.result);
         const wb = XLSX.read(data, {type:'array'});
         processFile(wb);
+        selectedCategoryFilter = 'all';
         buildTabs();
-        const clubs = aggregate(allResults);
-        renderStats(clubs);
-        renderTable(clubs);
+        renderCategoryFilter();
+        renderMainTabContent();
         setStatus(5,'done');
         setTimeout(() => {
           showCompSummary();
