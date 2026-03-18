@@ -932,8 +932,10 @@ function getPhaseType(faze) {
   if (!faze) return 'none'; // no phase = direct result
   const f = faze.trim();
   if (f.startsWith('Finále 1') || f.startsWith('Finále 2')) return 'double_final';
-  if (f.startsWith('Finále')) return 'final';
-  if (f.startsWith('Rozběh') || f.startsWith('Rozběh')) return 'heat';
+  if (/^Finále [B-Z](\s|$)/.test(f)) return 'b_final'; // B-final and beyond — athletes placed 9+, no points
+  if (f.startsWith('Finále')) return 'final'; // "Finále" or "Finále A"
+  if (f.startsWith('Skupina')) return 'skupina'; // field event groups — merged and re-ranked
+  if (f.startsWith('Rozběh')) return 'heat';
   if (f.startsWith('Běh')) return 'beh'; // relay / short-final heats
   return 'other';
 }
@@ -951,10 +953,11 @@ function processDiscipine(disc, rows) {
   const hasHeats = phaseTypes.some(t => t === 'heat');
   const hasBeh = phaseTypes.some(t => t === 'beh');
   const hasNone = phaseTypes.some(t => t === 'none');
+  const hasSkupina = phaseTypes.some(t => t === 'skupina');
 
   let finalAthletes = []; // {club, place (numeric), výkon, athlete}
 
-  if (hasNone && !hasFinal && !hasDoubleFinal && !hasBeh) {
+  if (hasNone && !hasFinal && !hasDoubleFinal && !hasBeh && !hasSkupina) {
     // Direct results (field events, combined events, middle distance)
     finalAthletes = rows
       .filter(r => r['Pořadí'] !== null && r['Pořadí'] !== undefined)
@@ -966,6 +969,9 @@ function processDiscipine(disc, rows) {
         nonFinish: isNonFinish(r['Pořadí']) || isNonFinish(r['Výkon']),
         phase: 'direct'
       }));
+  } else if (hasSkupina && !hasFinal && !hasDoubleFinal) {
+    // Field event groups (Skupina 1, Skupina 2…) — merge all groups and re-rank by výkon
+    finalAthletes = buildSkupinaRanking(rows);
   } else if (hasDoubleFinal) {
     // 400m: two finals → combine & re-rank by time
     finalAthletes = buildDoubleFinalRanking(rows);
@@ -1034,6 +1040,9 @@ function processDiscipine(disc, rows) {
     // but this path hit if no 'final' detected — fall back to Běh ranking
     finalAthletes = buildBehRanking(rows);
   }
+
+  // Re-number places sequentially (fixes gaps left by MS athletes removed at ingestion)
+  finalAthletes = reSequencePlaces(finalAthletes);
 
   // 3. Assign points with tie averaging (top 8 only)
   let pointsResults;
@@ -1111,6 +1120,74 @@ function buildBehRanking(rows) {
   const combined = [...unique, ...invalid];
   combined.forEach((a,i) => { a.place = i+1; });
   return combined;
+}
+
+function buildSkupinaRanking(rows) {
+  // Merge all Skupina rows and re-rank by výkon.
+  // Direction: ascending if výkon parses as a time; descending (higher = better) for field events.
+  const skupinaRows = rows.filter(r => getPhaseType(r['Fáze']) === 'skupina');
+
+  const valid = [];
+  const invalid = [];
+  for (const r of skupinaRows) {
+    if (isNonFinish(r['Výkon'])) {
+      invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+    } else {
+      const strV = r['Výkon'] != null ? String(r['Výkon']).trim() : '';
+      // Only treat výkon as a time when it contains ':' (e.g. "1:45.33").
+      // Bare decimals like "4.15" are field measurements (heights/distances), not times —
+      // parseTime() would otherwise accept them as seconds and sort them ascending (wrong).
+      const isTimeFormat = strV.includes(':');
+      const t = isTimeFormat ? parseTime(strV) : null;
+      if (isTimeFormat && t !== null) {
+        valid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], sort: t, isTime: true, nonFinish: false });
+      } else {
+        const num = parseFloat(strV.replace(',', '.'));
+        if (!isNaN(num)) {
+          valid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], sort: num, isTime: false, nonFinish: false });
+        } else {
+          invalid.push({ club: stripRelayTeamSuffix(r['Oddíl/stát']), athlete: r['Závodník'], výkon: r['Výkon'], nonFinish: true });
+        }
+      }
+    }
+  }
+
+  // Use ascending order for time events; descending (higher = better) for field events
+  const isTimeEvent = valid.length > 0 && valid[0].isTime;
+  valid.sort((a, b) => isTimeEvent ? a.sort - b.sort : b.sort - a.sort);
+
+  // Deduplicate athletes (keep best result)
+  const seen = new Set();
+  const unique = [];
+  for (const v of valid) {
+    if (!seen.has(v.athlete)) { seen.add(v.athlete); unique.push(v); }
+  }
+
+  const combined = [...unique, ...invalid];
+  combined.forEach((a, i) => { a.place = i + 1; });
+  return combined;
+}
+
+// Re-assign sequential places starting from 1, compressing any gaps left by removed athletes.
+// Tied athletes (same original place) retain the same new place.
+function reSequencePlaces(athletes) {
+  const withPlace = athletes
+    .filter(a => a.place !== null && !a.nonFinish)
+    .sort((a, b) => a.place - b.place);
+  const withoutPlace = athletes.filter(a => a.place === null || a.nonFinish);
+
+  let newPlace = 1;
+  let i = 0;
+  const reranked = [];
+  while (i < withPlace.length) {
+    const origPlace = withPlace[i].place;
+    let j = i;
+    while (j < withPlace.length && withPlace[j].place === origPlace) j++;
+    for (let k = i; k < j; k++) reranked.push({ ...withPlace[k], place: newPlace });
+    newPlace += (j - i);
+    i = j;
+  }
+  return [...reranked, ...withoutPlace.map(a => ({ ...a }))];
 }
 
 // Re-rank a kraj-filtered subset of athletes, preserving relative order and global tie groups.
