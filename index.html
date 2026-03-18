@@ -822,10 +822,6 @@ let currentCat = 'all';
 
 // Clubs database state
 let clubsDatabase = [];
-let clubSearchTerm = '';
-let selectedClubRegion = 'all';
-let clubSortCol = null;
-let clubSortDir = 'asc';
 
 // Category filter (sloučené mode only — replaces category tabs)
 let selectedCategoryFilter = 'all';
@@ -1450,7 +1446,6 @@ function buildTabs() {
     addTab('kraje', 'Kraje');
   }
 
-  addTab('clubs-db', 'Databáze klubů');
   addTab('disciplines', 'Disciplíny');
 }
 
@@ -1466,10 +1461,6 @@ function switchTab(el) {
     renderCategoryFilter();
     renderKrajeTable();
     renderKrajeStats();
-  } else if (currentCat === 'clubs-db') {
-    renderClubsDbFilters();
-    renderClubsDbStats();
-    renderClubsDbTable();
   } else if (currentCat === 'disciplines') {
     renderDisciplinesFilters();
     renderDisciplinesStats();
@@ -1565,114 +1556,6 @@ function renderKrajeStats() {
     <div class="stat-card"><div class="val">${totalFinals}</div><div class="lbl">Finálových umístění</div></div>
     <div class="stat-card"><div class="val">${kasGroups[0]?.kraj || '–'}</div><div class="lbl">1. místo</div></div>
   `;
-}
-
-// ─── CLUBS DATABASE TAB ─────────────────────────────────────────────────────
-function getFilteredClubsDb() {
-  let data = [...clubsDatabase];
-  
-  // Filter by search term
-  if (clubSearchTerm) {
-    const term = normalizeClubName(clubSearchTerm);
-    data = data.filter(c => 
-      normalizeClubName(c.nazev || '').includes(term) ||
-      normalizeClubName(c.zkratka || '').includes(term) ||
-      normalizeClubName(c.kontakt || '').includes(term) ||
-      normalizeClubName(c.adresa || '').includes(term)
-    );
-  }
-  
-  // Filter by region
-  if (selectedClubRegion !== 'all') {
-    data = data.filter(c => c.kraj === selectedClubRegion);
-  }
-  
-  // Sort
-  if (clubSortCol) {
-    data.sort((a, b) => {
-      const valA = (a[clubSortCol] || '').toLowerCase();
-      const valB = (b[clubSortCol] || '').toLowerCase();
-      const cmp = valA.localeCompare(valB, 'cs');
-      return clubSortDir === 'asc' ? cmp : -cmp;
-    });
-  }
-  
-  return data;
-}
-
-function renderClubsDbFilters() {
-  const filtersBar = document.getElementById('filtersBar');
-  filtersBar.style.display = 'flex';
-  
-  const regions = [...new Set(clubsDatabase.map(c => c.kraj))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'cs'));
-  
-  filtersBar.innerHTML = `
-    <input type="text" class="filter-input" id="clubSearchInput" placeholder="🔍 Hledat klub..." value="${clubSearchTerm}">
-    <select class="filter-select" id="clubRegionSelect">
-      <option value="all">Všechny kraje</option>
-      ${regions.map(r => `<option value="${r}" ${selectedClubRegion === r ? 'selected' : ''}>${r}</option>`).join('')}
-    </select>
-  `;
-  
-  document.getElementById('clubSearchInput').addEventListener('input', e => {
-    clubSearchTerm = e.target.value;
-    renderClubsDbStats();
-    renderClubsDbTable();
-  });
-  
-  document.getElementById('clubRegionSelect').addEventListener('change', e => {
-    selectedClubRegion = e.target.value;
-    renderClubsDbStats();
-    renderClubsDbTable();
-  });
-}
-
-function renderClubsDbStats() {
-  const filtered = getFilteredClubsDb();
-  const statsRow = document.getElementById('statsRow');
-  statsRow.innerHTML = `
-    <div class="stat-card"><div class="val">${clubsDatabase.length}</div><div class="lbl">Klubů v databázi</div></div>
-    <div class="stat-card"><div class="val">${filtered.length}</div><div class="lbl">Zobrazených klubů</div></div>
-  `;
-}
-
-function renderClubsDbTable() {
-  const thead = document.getElementById('tableHead');
-  thead.innerHTML = `
-    <tr>
-      <th class="sortable ${clubSortCol === 'zkratka' ? clubSortDir : ''}" onclick="sortClubsDb('zkratka')">Zkratka</th>
-      <th class="sortable ${clubSortCol === 'nazev' ? clubSortDir : ''}" onclick="sortClubsDb('nazev')" style="text-align:left;padding-left:16px">Název</th>
-      <th class="sortable ${clubSortCol === 'kraj' ? clubSortDir : ''}" onclick="sortClubsDb('kraj')">Kraj</th>
-      <th>Kontakt</th>
-      <th style="text-align:left">Adresa</th>
-    </tr>
-  `;
-  
-  const filtered = getFilteredClubsDb();
-  const tbody = document.getElementById('tableBody');
-  tbody.innerHTML = '';
-  
-  filtered.forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${c.zkratka || ''}</td>
-      <td style="text-align:left;padding-left:16px">${c.nazev || ''}</td>
-      <td>${c.kraj || ''}</td>
-      <td>${c.kontakt || ''}</td>
-      <td style="text-align:left">${c.adresa || ''}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function sortClubsDb(col) {
-  if (clubSortCol === col) {
-    clubSortDir = clubSortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    clubSortCol = col;
-    clubSortDir = 'asc';
-  }
-  renderClubsDbTable();
 }
 
 // ─── DISCIPLINES TAB ────────────────────────────────────────────────────────
