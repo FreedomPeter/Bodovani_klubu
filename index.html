@@ -733,6 +733,25 @@ const CATEGORY_ORDER = [
 // Sort by descending length so longer (more specific) names match first
 const CATEGORY_MATCH_ORDER = [...CATEGORY_ORDER].sort((a,b) => b.length - a.length);
 
+// Male / female category sets — used by the "celkem" aggregate filter options
+const MALE_CATS = new Set([
+  'Muži','U23 muži','Junioři','Dorostenci','Žáci','Ml. žáci',
+  'Atletická přípravka-hoši','Atletická minipřípravka-hoši'
+]);
+const FEMALE_CATS = new Set([
+  'Ženy','U23 ženy','Juniorky','Dorostenky','Žákyně','Ml. žákyně',
+  'Atletická přípravka-dívky','Atletická minipřípravka-dívky'
+]);
+
+// Apply the selected category filter to a results array.
+// Handles regular category values as well as the two aggregate specials.
+function applyGenderFilter(results, filter) {
+  if (filter === 'all') return results;
+  if (filter === 'muzi-celkem')  return results.filter(r => MALE_CATS.has(r.gender));
+  if (filter === 'zeny-celkem')  return results.filter(r => FEMALE_CATS.has(r.gender));
+  return results.filter(r => r.gender === filter);
+}
+
 function extractCategory(disc) {
   const d = disc.toLowerCase();
   for (const cat of CATEGORY_MATCH_ORDER) {
@@ -1287,10 +1306,15 @@ function renderCategoryFilter() {
   filtersBar.style.display = 'flex';
 
   const presentCats = CATEGORY_ORDER.filter(cat => allResults.some(r => r.gender === cat));
+  const hasMale   = presentCats.some(c => MALE_CATS.has(c));
+  const hasFemale = presentCats.some(c => FEMALE_CATS.has(c));
+  const sel = selectedCategoryFilter;
   filtersBar.innerHTML = `
     <select class="filter-select" id="categoryFilterSelect">
-      <option value="all">Všechny kategorie</option>
-      ${presentCats.map(c => `<option value="${c}" ${selectedCategoryFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+      <option value="all" ${sel === 'all' ? 'selected' : ''}>Všechny kategorie</option>
+      ${hasMale   ? `<option value="muzi-celkem" ${sel === 'muzi-celkem' ? 'selected' : ''}>Muži celkem</option>` : ''}
+      ${hasFemale ? `<option value="zeny-celkem" ${sel === 'zeny-celkem' ? 'selected' : ''}>Ženy celkem</option>` : ''}
+      ${presentCats.map(c => `<option value="${c}" ${sel === c ? 'selected' : ''}>${c}</option>`).join('')}
     </select>
   `;
 
@@ -1315,9 +1339,7 @@ function renderMainTabContent() {
   } else {
     base = allResults;
   }
-  const filtered = selectedCategoryFilter !== 'all'
-    ? base.filter(r => r.gender === selectedCategoryFilter)
-    : base;
+  const filtered = applyGenderFilter(base, selectedCategoryFilter);
   const clubs = aggregate(filtered);
   const hideKraj =
     competitionConfig.typ === 'Krajský přebor' ||
@@ -1395,7 +1417,7 @@ function renderKrajeTable() {
     </tr>
   `;
   
-  const base = selectedCategoryFilter !== 'all' ? allResults.filter(r => r.gender === selectedCategoryFilter) : allResults;
+  const base = applyGenderFilter(allResults, selectedCategoryFilter);
   const clubs = aggregate(base);
   const kasGroups = getKasData(clubs);
 
@@ -1452,7 +1474,7 @@ function toggleKasExpand(row, kas) {
 }
 
 function renderKrajeStats() {
-  const base = selectedCategoryFilter !== 'all' ? allResults.filter(r => r.gender === selectedCategoryFilter) : allResults;
+  const base = applyGenderFilter(allResults, selectedCategoryFilter);
   const clubs = aggregate(base);
   const kasGroups = getKasData(clubs);
   const statsRow = document.getElementById('statsRow');
