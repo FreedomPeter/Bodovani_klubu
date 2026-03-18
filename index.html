@@ -1296,7 +1296,12 @@ function renderCategoryFilter() {
 
   document.getElementById('categoryFilterSelect').addEventListener('change', e => {
     selectedCategoryFilter = e.target.value;
-    renderMainTabContent();
+    if (currentCat === 'kraje') {
+      renderKrajeTable();
+      renderKrajeStats();
+    } else {
+      renderMainTabContent();
+    }
   });
 }
 
@@ -1359,6 +1364,7 @@ function switchTab(el) {
   document.getElementById('filtersBar').style.display = 'none';
 
   if (currentCat === 'kraje') {
+    renderCategoryFilter();
     renderKrajeTable();
     renderKrajeStats();
   } else if (currentCat === 'clubs-db') {
@@ -1389,9 +1395,10 @@ function renderKrajeTable() {
     </tr>
   `;
   
-  const clubs = aggregate(allResults);
+  const base = selectedCategoryFilter !== 'all' ? allResults.filter(r => r.gender === selectedCategoryFilter) : allResults;
+  const clubs = aggregate(base);
   const kasGroups = getKasData(clubs);
-  
+
   const tbody = document.getElementById('tableBody');
   tbody.innerHTML = '';
   
@@ -1445,7 +1452,8 @@ function toggleKasExpand(row, kas) {
 }
 
 function renderKrajeStats() {
-  const clubs = aggregate(allResults);
+  const base = selectedCategoryFilter !== 'all' ? allResults.filter(r => r.gender === selectedCategoryFilter) : allResults;
+  const clubs = aggregate(base);
   const kasGroups = getKasData(clubs);
   const statsRow = document.getElementById('statsRow');
   const totalKraje = kasGroups.length;
