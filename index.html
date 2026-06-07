@@ -580,6 +580,8 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
         <button class="btn btn-outline" onclick="exportCSV()">⬇ CSV</button>
         <button class="btn btn-outline" onclick="exportPDF()">📄 PDF</button>
         <button class="btn btn-primary" onclick="exportXLSX()">📊 Export XLSX</button>
+        <button class="btn btn-outline" onclick="exportFullPDF()">📦 Celkový PDF</button>
+        <button class="btn btn-outline" onclick="exportFullXLSX()">📦 Celkový XLSX</button>
       </div>
     </div>
 
@@ -2079,6 +2081,143 @@ function exportPDF() {
       <tbody>${clubRows}</tbody>
     </table>
     ${krajeSection}
+    <div class="foot"><span>Vygenerováno aplikací Bodování klubů</span><span>${esc(dateStr)}</span></div>
+    <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 350); };<\/script>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { showError('Vyskakovací okno bylo zablokováno — povolte ho pro tuto stránku a zkuste PDF znovu.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
+// ─── COMPREHENSIVE EXPORT (Celkem + Muži/Ženy složky + jednotlivé kategorie) ──
+// Builds the list of standings sections: overall, men's total, women's total,
+// then every individual category present in the data (canonical order).
+function buildExportSections() {
+  const presentCats = CATEGORY_ORDER.filter(cat => allResults.some(r => r.gender === cat));
+  const hasMale   = presentCats.some(c => MALE_CATS.has(c));
+  const hasFemale = presentCats.some(c => FEMALE_CATS.has(c));
+  const sections = [];
+  sections.push({ label: 'Celkem', clubs: aggregate(allResults) });
+  if (hasMale)   sections.push({ label: 'Muži celkem',  clubs: aggregate(applyGenderFilter(allResults, 'muzi-celkem')) });
+  if (hasFemale) sections.push({ label: 'Ženy celkem',  clubs: aggregate(applyGenderFilter(allResults, 'zeny-celkem')) });
+  for (const c of presentCats) {
+    const cl = aggregate(applyGenderFilter(allResults, c));
+    if (cl.length) sections.push({ label: c, clubs: cl });
+  }
+  return sections;
+}
+
+function exportFullXLSX() {
+  const sections = buildExportSections();
+  if (!sections.length) { showError('Nejsou žádná data k exportu.'); return; }
+  const header = ['Pořadí', 'AO / AK', 'Kraj', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', 'Finálových umístění', 'Body'];
+  const cols = [{wch:6},{wch:45},{wch:18},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:4},{wch:18},{wch:8}];
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+  for (const s of sections) {
+    const data = [header];
+    s.clubs.forEach((c, i) => data.push([
+      i + 1, c.club, c.kraj,
+      c.places[1]||0, c.places[2]||0, c.places[3]||0, c.places[4]||0,
+      c.places[5]||0, c.places[6]||0, c.places[7]||0, c.places[8]||0,
+      c.finals, c.total
+    ]));
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = cols;
+    // Excel sheet name: ≤31 chars, no \ / ? * [ ] :, must be unique
+    let name = s.label.replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31).trim() || 'List';
+    let base = name, n = 2;
+    while (used.has(name.toLowerCase())) { name = (base.slice(0, 28) + ' ' + n); n++; }
+    used.add(name.toLowerCase());
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  }
+  XLSX.writeFile(wb, safeFilename((competitionConfig.nazev || 'bodovani_klubu') + ' - souhrn') + '.xlsx');
+}
+
+function exportFullPDF() {
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const sections = buildExportSections();
+  if (!sections.length) { showError('Nejsou žádná data k exportu.'); return; }
+
+  const hideKraj = new Set(aggregate(allResults).map(c => c.kraj || '?')).size <= 1;
+  const totalDisc = new Set(allResults.map(r => r.disc)).size;
+  const { nazev, typ, kraj, krajeList } = competitionConfig;
+  let detail = typ || '';
+  if (typ === 'Krajský přebor' && kraj) detail += ' – ' + kraj;
+  else if (typ === 'Sloučené krajské přebory' && krajeList && krajeList.length) detail += ': ' + krajeList.join(', ');
+  const dateStr = new Date().toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' });
+  const medal = { 1:'rank-gold', 2:'rank-silver', 3:'rank-bronze' };
+
+  const tableFor = clubs => {
+    const body = clubs.map((c, i) => {
+      const r = i + 1;
+      return `<tr class="${medal[r] || ''}"><td class="c-rank">${r}</td><td class="c-club">${esc(c.club)}</td>${hideKraj ? '' : `<td class="c-kraj">${esc(c.kraj)}</td>`}<td>${c.places[1]||0}</td><td>${c.places[2]||0}</td><td>${c.places[3]||0}</td><td>${c.places[4]||0}</td><td>${c.places[5]||0}</td><td>${c.places[6]||0}</td><td>${c.places[7]||0}</td><td>${c.places[8]||0}</td><td class="c-fin">${c.finals}</td><td class="c-pts">${fmtPts(c.total)}</td></tr>`;
+    }).join('');
+    return `<table><thead><tr><th class="c-rank">#</th><th style="text-align:left">Klub</th>${hideKraj ? '' : '<th style="text-align:left">Kraj</th>'}<th>1.</th><th>2.</th><th>3.</th><th>4.</th><th>5.</th><th>6.</th><th>7.</th><th>8.</th><th>Fin.</th><th>Body</th></tr></thead><tbody>${body}</tbody></table>`;
+  };
+
+  const sectionsHTML = sections.map((s, i) => {
+    const pts = s.clubs.reduce((a, c) => a + c.total, 0);
+    const fin = s.clubs.reduce((a, c) => a + c.finals, 0);
+    return `<section class="${i > 0 ? 'pagebreak' : ''}">
+      <h2 class="section-title">${esc(s.label)}</h2>
+      <div class="section-meta">${s.clubs.length} klubů · ${fin} finálových umístění · ${fmtPts(pts)} bodů</div>
+      ${tableFor(s.clubs)}
+    </section>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
+  <title>${esc(nazev || 'Bodování klubů')} — souhrn</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{ --accent:#4f7cff; --accent2:#7c4fff; --ink:#1a1e2e; --muted:#6b7399; --line:#e3e7f0; --soft:#f6f8fc; }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    @page{ size:A4 landscape; margin:14mm 12mm; }
+    body{ font-family:'Inter',-apple-system,Arial,sans-serif; color:var(--ink); font-size:11px; line-height:1.4; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .head{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid var(--accent); padding-bottom:12px; margin-bottom:6px; }
+    .head h1{ font-size:22px; font-weight:800; letter-spacing:-.02em; }
+    .head .detail{ color:var(--muted); font-weight:600; font-size:12px; margin-top:3px; }
+    .brand{ text-align:right; } .brand .logo{ font-weight:800; font-size:13px; background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .brand .date{ color:var(--muted); font-size:10px; margin-top:2px; }
+    .summary{ display:flex; gap:10px; margin:14px 0 4px; }
+    .chip{ flex:1; background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:9px 12px; }
+    .chip .v{ font-size:18px; font-weight:800; color:var(--accent); }
+    .chip .l{ font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+    .section-title{ font-size:15px; font-weight:800; margin:16px 0 2px; color:var(--ink); border-left:4px solid var(--accent); padding-left:8px; }
+    .section-meta{ color:var(--muted); font-size:10px; margin:0 0 8px 12px; }
+    section.pagebreak{ page-break-before:always; }
+    table{ width:100%; border-collapse:collapse; margin-bottom:4px; }
+    thead th{ background:var(--accent); color:#fff; font-weight:600; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em; padding:7px 6px; text-align:center; }
+    thead th:first-child{ border-top-left-radius:8px; } thead th:last-child{ border-top-right-radius:8px; }
+    tbody td{ padding:6px; text-align:center; border-bottom:1px solid var(--line); }
+    tbody tr:nth-child(even){ background:var(--soft); }
+    .c-rank{ font-weight:700; color:var(--muted); width:34px; }
+    .c-club{ text-align:left !important; font-weight:600; }
+    .c-kraj{ text-align:left !important; color:var(--muted); }
+    .c-fin{ font-weight:600; }
+    .c-pts{ font-weight:800; color:var(--accent); font-size:12px; }
+    tr.rank-gold{ background:#fff9e0 !important; } tr.rank-gold .c-rank{ color:#b8860b; }
+    tr.rank-silver{ background:#f3f5f8 !important; } tr.rank-silver .c-rank{ color:#7d8597; }
+    tr.rank-bronze{ background:#fbf0e6 !important; } tr.rank-bronze .c-rank{ color:#b5651d; }
+    tr.rank-gold .c-rank::before{ content:'🥇 '; } tr.rank-silver .c-rank::before{ content:'🥈 '; } tr.rank-bronze .c-rank::before{ content:'🥉 '; }
+    .foot{ margin-top:14px; padding-top:8px; border-top:1px solid var(--line); color:var(--muted); font-size:9px; display:flex; justify-content:space-between; }
+    .print-hint{ position:fixed; top:0; left:0; right:0; background:var(--accent); color:#fff; padding:8px; text-align:center; font-weight:600; font-size:12px; z-index:9; }
+    @media print{ .print-hint{ display:none; } }
+  </style></head>
+  <body>
+    <div class="print-hint">Tisk → „Uložit jako PDF". Toto okno po uložení zavřete.</div>
+    <div class="head">
+      <div><h1>${esc(nazev || 'Bodování klubů')}</h1>${detail ? `<div class="detail">${esc(detail)}</div>` : ''}</div>
+      <div class="brand"><div class="logo">Bodování klubů · souhrn</div><div class="date">${esc(dateStr)}</div></div>
+    </div>
+    <div class="summary">
+      <div class="chip"><div class="v">${aggregate(allResults).length}</div><div class="l">Klubů</div></div>
+      <div class="chip"><div class="v">${totalDisc}</div><div class="l">Disciplín</div></div>
+      <div class="chip"><div class="v">${sections.length}</div><div class="l">Tabulek</div></div>
+      <div class="chip"><div class="v">${fmtPts(aggregate(allResults).reduce((a,c)=>a+c.total,0))}</div><div class="l">Bodů celkem</div></div>
+    </div>
+    ${sectionsHTML}
     <div class="foot"><span>Vygenerováno aplikací Bodování klubů</span><span>${esc(dateStr)}</span></div>
     <script>window.onload=function(){ setTimeout(function(){ window.print(); }, 350); };<\/script>
   </body></html>`;
