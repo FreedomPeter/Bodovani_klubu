@@ -918,12 +918,12 @@ function processFile(wb) {
   allAthleteResults = [];
 
   for (const disc of discSet) {
-    // Mix relays (smíšené štafety) are a category of their own and are NOT counted
-    // into the club scoring at all.
-    if (extractCategory(disc).startsWith('Mix')) continue;
     const discRows = filtered.filter(r => r['Disciplína'] === disc);
     const { pointsResults, fullResults } = processDiscipine(disc, discRows);
-    allResults.push(...pointsResults);
+    // Mix relays (smíšené štafety) are a category of their own: they are NOT counted
+    // into the club scoring, but they ARE still listed in the per-discipline results.
+    const isMix = extractCategory(disc).startsWith('Mix');
+    if (!isMix) allResults.push(...pointsResults);
     allAthleteResults.push(...fullResults);
   }
 
