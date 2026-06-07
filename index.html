@@ -1398,7 +1398,9 @@ function renderCategoryFilter() {
   const filtersBar = document.getElementById('filtersBar');
   filtersBar.style.display = 'flex';
 
-  const presentCats = CATEGORY_ORDER.filter(cat => allResults.some(r => r.gender === cat));
+  // Mix categories (smíšené štafety) are not shown as a standalone category —
+  // they still count toward the overall "Celkem" total.
+  const presentCats = CATEGORY_ORDER.filter(cat => !cat.startsWith('Mix') && allResults.some(r => r.gender === cat));
   const hasMale   = presentCats.some(c => MALE_CATS.has(c));
   const hasFemale = presentCats.some(c => FEMALE_CATS.has(c));
   const sel = selectedCategoryFilter;
@@ -2094,7 +2096,8 @@ function exportPDF() {
 // Builds the list of standings sections: overall, men's total, women's total,
 // then every individual category present in the data (canonical order).
 function buildExportSections() {
-  const presentCats = CATEGORY_ORDER.filter(cat => allResults.some(r => r.gender === cat));
+  // Mix categories are not exported as standalone sections (they still count in "Celkem").
+  const presentCats = CATEGORY_ORDER.filter(cat => !cat.startsWith('Mix') && allResults.some(r => r.gender === cat));
   const hasMale   = presentCats.some(c => MALE_CATS.has(c));
   const hasFemale = presentCats.some(c => FEMALE_CATS.has(c));
   const sections = [];
