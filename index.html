@@ -727,6 +727,7 @@ const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
 const CATEGORY_ORDER = [
   'Muži','Ženy','U23 muži','U23 ženy','Junioři','Juniorky',
   'Dorostenci','Dorostenky','Žáci','Žákyně','Ml. žáci','Ml. žákyně',
+  'Mix U18','Mix U16','Mix',
   'Atletická přípravka-hoši','Atletická přípravka-dívky',
   'Atletická minipřípravka-hoši','Atletická minipřípravka-dívky'
 ];
@@ -975,12 +976,12 @@ function processDiscipine(disc, rows) {
     // Relay / events with only Běh phases → rank by time across all heats
     finalAthletes = buildBehRanking(rows);
   } else if (hasFinal) {
-    // Standard final + possible heats (200m)
+    // A-final places come from the official Pořadí. When fewer than 8 athletes
+    // placed in the A-final, the remaining scoring positions (7., 8., …) are filled:
+    //   • from the B-final (then C-final, …) in finished order, if a B-final was run;
+    //   • otherwise from the fastest heat (rozběh) times.
     const finalRows = rows.filter(r => getPhaseType(r['Fáze']) === 'final');
     const heatRows = rows.filter(r => getPhaseType(r['Fáze']) === 'heat');
-
-    // Finalists that have valid numeric placements or DNS/DQ etc in final
-    const finalistClubs = new Set(finalRows.map(r => r['Závodník']));
 
     // Build final athletes with their places
     let fa = finalRows.map(r => ({
@@ -991,21 +992,40 @@ function processDiscipine(disc, rows) {
       nonFinish: isNonFinish(r['Výkon']),
     }));
 
-    // Count how many have numeric places in final
-    const withPlace = fa.filter(a => a.place !== null);
-    const maxFinalPlace = withPlace.length > 0 ? Math.max(...withPlace.map(a=>a.place)) : 0;
+    // Valid A-final placements only (exclude DNS/DQ/DNF)
+    const aFinalValid = fa.filter(a => a.place !== null && !a.nonFinish);
+    const needed = 8 - aFinalValid.length;
 
-    // If final has fewer than 8 finishers, supplement from heats
-    // Exclude athletes who were in the final
-    if (maxFinalPlace < 8 && heatRows.length > 0) {
-      // For counting DNS/DQ in final: they still hold a slot
-      const finalCount = fa.length; // total athletes in final including DNS/DQ
-      const neededFromHeats = 8 - finalCount;
+    if (needed > 0) {
+      const maxAplace = aFinalValid.length > 0 ? Math.max(...aFinalValid.map(a => a.place)) : 0;
+      let nextPlace = maxAplace + 1;
 
-      if (neededFromHeats > 0) {
-        // Get heat athletes not in final, with valid times, sorted by time asc
+      // Collect B/C/… final finishers, ordered by final letter (B before C…) then placement
+      const lowerFinals = rows
+        .filter(r => getPhaseType(r['Fáze']) === 'b_final')
+        .filter(r => parsePlacard(r['Pořadí']) !== null && !isNonFinish(r['Výkon']))
+        .map(r => {
+          const m = String(r['Fáze']).trim().match(/^Finále ([B-Z])/);
+          return {
+            club: stripRelayTeamSuffix(r['Oddíl/stát']),
+            athlete: r['Závodník'],
+            výkon: r['Výkon'],
+            letter: m ? m[1] : 'Z',
+            bplace: parsePlacard(r['Pořadí'])
+          };
+        })
+        .sort((a, b) => a.letter === b.letter ? a.bplace - b.bplace : a.letter.localeCompare(b.letter));
+
+      if (lowerFinals.length > 0) {
+        // B-final exists → fill from it
+        for (const b of lowerFinals.slice(0, needed)) {
+          fa.push({ club: b.club, athlete: b.athlete, place: nextPlace++, výkon: b.výkon, nonFinish: false });
+        }
+      } else if (heatRows.length > 0) {
+        // No B-final → fall back to fastest heat times (excluding athletes already in the final)
+        const finalistNames = new Set(finalRows.map(r => r['Závodník']));
         const heatCandidates = heatRows
-          .filter(r => !finalistClubs.has(r['Závodník']))
+          .filter(r => !finalistNames.has(r['Závodník']))
           .filter(r => !isNonFinish(r['Výkon']) && parseTime(String(r['Výkon'])) !== null)
           .map(r => ({
             club: stripRelayTeamSuffix(r['Oddíl/stát']),
@@ -1013,18 +1033,14 @@ function processDiscipine(disc, rows) {
             výkon: r['Výkon'],
             time: parseTime(String(r['Výkon']))
           }))
-          // Deduplicate athletes (keep best time)
-          .sort((a,b) => a.time - b.time);
+          .sort((a, b) => a.time - b.time);
 
         const seen = new Set();
         const unique = [];
         for (const c of heatCandidates) {
           if (!seen.has(c.athlete)) { seen.add(c.athlete); unique.push(c); }
         }
-
-        const supplement = unique.slice(0, neededFromHeats);
-        let nextPlace = finalCount + 1;
-        for (const s of supplement) {
+        for (const s of unique.slice(0, needed)) {
           fa.push({ club: s.club, athlete: s.athlete, place: nextPlace++, výkon: s.výkon, nonFinish: false });
         }
       }
@@ -1212,10 +1228,12 @@ function reRankForKraj(athletes) {
 function assignPointsToAthletes(athletes, disc, gender) {
   if (!athletes.length) return [];
 
-  // Group by numeric place to detect ties
+  // Group by numeric place to detect ties.
+  // Non-finishers (DNS/DQ/DNF/…) never score, even if a place was assigned to them
+  // while re-ranking (relays, double finals, field groups).
   const byPlace = {};
   for (const a of athletes) {
-    if (a.place === null) continue;
+    if (a.place === null || a.nonFinish) continue;
     if (!byPlace[a.place]) byPlace[a.place] = [];
     byPlace[a.place].push(a);
   }
@@ -1224,9 +1242,8 @@ function assignPointsToAthletes(athletes, disc, gender) {
   const placesProcessed = new Set();
 
   for (const a of athletes) {
-    if (a.place === null && !a.nonFinish) continue;
+    if (a.place === null || a.nonFinish) continue; // skip non-finishers
     let place = a.place;
-    if (place === null) continue; // no place at all - skip
 
     if (place > 8) continue; // only 1-8 get points
 
@@ -1273,7 +1290,7 @@ function buildFullAthleteResults(athletes, disc, gender) {
       club: a.club,
       kraj: getKrajForClub(a.club),
       place: a.place,
-      points: a.place <= 8 ? (PLACE_POINTS[a.place] || 0) : 0,
+      points: (!a.nonFinish && a.place <= 8) ? (PLACE_POINTS[a.place] || 0) : 0,
       athlete: a.athlete || '',
       výkon: a.výkon != null ? String(a.výkon) : ''
     }));
