@@ -1061,11 +1061,9 @@ function processDiscipine(disc, rows) {
     finalAthletes = buildBehRanking(rows);
   } else if (hasFinal) {
     // A-final places come from the official Pořadí. DNS/DNF/DQ athletes in
-    // the final do not score, and their final slots are not back-filled from
-    // heats. Only genuinely empty A-final slots can be filled from lower finals
-    // or heats.
+    // the final do not score, and final standings are never back-filled from
+    // heats. Only genuinely empty A-final slots can be filled from lower finals.
     const finalRows = rows.filter(r => getPhaseType(r['Fáze']) === 'final');
-    const heatRows = rows.filter(r => getPhaseType(r['Fáze']) === 'heat');
 
     // Build final athletes with their places
     let fa = finalRows.map(r => ({
@@ -1106,28 +1104,6 @@ function processDiscipine(disc, rows) {
         // B-final exists → fill from it
         for (const b of lowerFinals.slice(0, needed)) {
           fa.push({ club: b.club, athlete: b.athlete, place: nextPlace++, výkon: b.výkon, nonFinish: false });
-        }
-      } else if (heatRows.length > 0) {
-        // No B-final → fall back to fastest heat times (excluding athletes already in the final)
-        const finalistNames = new Set(finalRows.map(r => r['Závodník']));
-        const heatCandidates = heatRows
-          .filter(r => !finalistNames.has(r['Závodník']))
-          .filter(r => !isNonFinish(r['Výkon']) && parseTime(String(r['Výkon'])) !== null)
-          .map(r => ({
-            club: stripRelayTeamSuffix(r['Oddíl/stát']),
-            athlete: r['Závodník'],
-            výkon: r['Výkon'],
-            time: parseTime(String(r['Výkon']))
-          }))
-          .sort((a, b) => a.time - b.time);
-
-        const seen = new Set();
-        const unique = [];
-        for (const c of heatCandidates) {
-          if (!seen.has(c.athlete)) { seen.add(c.athlete); unique.push(c); }
-        }
-        for (const s of unique.slice(0, needed)) {
-          fa.push({ club: s.club, athlete: s.athlete, place: nextPlace++, výkon: s.výkon, nonFinish: false });
         }
       }
     }
