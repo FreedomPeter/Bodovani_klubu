@@ -313,6 +313,18 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
 .comp-summary .cs-sep { color: var(--border); }
 .comp-summary .cs-detail { color: var(--muted); }
 
+.mode-help {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(79,124,255,0.22);
+  border-radius: 10px;
+  background: rgba(79,124,255,0.07);
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.mode-help strong { color: var(--text); }
+
 /* Multi-kraj checkbox group */
 .kraje-multi-group {
   margin-top: 16px;
@@ -497,6 +509,7 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
         <select id="cfgTyp" onchange="onConfigChange()">
           <option value="">— vyberte typ —</option>
           <option value="Mistrovství ČR">Mistrovství ČR</option>
+          <option value="MČR dorost/junioři – sloučené">MČR dorost/junioři – sloučené</option>
           <option value="Krajský přebor">Krajský přebor</option>
           <option value="Sloučené krajské přebory">Sloučené krajské přebory</option>
         </select>
@@ -541,14 +554,18 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
         <label><input type="checkbox" value="Moravskoslezský" onchange="onConfigChange()"> Moravskoslezský</label>
       </div>
     </div>
+    <div id="mcrCombinedHelp" class="mode-help" style="display:none;">
+      <strong>Režim pro sloučené MČR:</strong>
+      nahrajte více výsledkových XLSX souborů najednou. Appka započítá jen kategorie dorostenci/dorostenky/junioři/juniorky a u souboru s víceboji jen celkové řádky vícebojů.
+    </div>
   </div>
 
   <!-- Upload -->
   <div class="upload-zone upload-disabled" id="uploadZone">
     <input type="file" id="fileInput" accept=".xlsx,.xls" disabled>
     <div class="upload-icon">📂</div>
-    <h2>Nahrajte soubor s výsledky</h2>
-    <p>Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr</p>
+    <h2 id="uploadTitle">Nahrajte soubor s výsledky</h2>
+    <p id="uploadHint">Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr</p>
     <button class="btn btn-primary btn-upload" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
       Vybrat soubor
     </button>
@@ -746,6 +763,8 @@ const FEMALE_CATS = new Set([
   'Ženy','U23 ženy','Juniorky','Dorostenky','Žákyně','Ml. žákyně',
   'Atletická přípravka-dívky','Atletická minipřípravka-dívky'
 ]);
+const MCR_DOROST_JUNIOR_CATS = new Set(['Dorostenci','Dorostenky','Junioři','Juniorky']);
+const COMBINED_EVENT_RE = /^(desetiboj|sedmiboj|pětiboj|petiboj|devítiboj|devitiboj)\b/i;
 
 // Apply the selected category filter to a results array.
 // Handles regular category values as well as the two aggregate specials.
@@ -764,6 +783,32 @@ function extractCategory(disc) {
   return 'Muži'; // fallback
 }
 
+function isMcrCombinedMode() {
+  return competitionConfig.typ === 'MČR dorost/junioři – sloučené';
+}
+
+function sourceLabelFromFileName(name, index = 0) {
+  const normalized = normalizeClubName(name || '');
+  if (normalized.includes('viceboj') || normalized.includes('viceboje')) return 'Viceboje';
+  if (normalized.includes('chuze')) return 'Chuze';
+  if (normalized.includes('gigant')) return 'Gigant';
+  const clean = String(name || '').replace(/\.(xlsx|xls)$/i, '').trim();
+  return clean || `Soubor ${index + 1}`;
+}
+
+function isCombinedEventsWorkbook(rows, fileName) {
+  const normalized = normalizeClubName(fileName || '');
+  if (normalized.includes('viceboj') || normalized.includes('viceboje')) return true;
+  const numericBodyRows = rows.filter(rowBodyIsNumeric).length;
+  const hasCombinedOverall = rows.some(r => COMBINED_EVENT_RE.test(String(r['Disciplína'] || '')) && !rowBodyIsNumeric(r));
+  return hasCombinedOverall && numericBodyRows > rows.length * 0.35;
+}
+
+function rowBodyIsNumeric(r) {
+  const body = r['Body'];
+  return body !== null && body !== undefined && String(body).trim() !== '' && !isNaN(Number(body));
+}
+
 // ─── COMPETITION CONFIG ──────────────────────────────────────────────────────
 let competitionConfig = { nazev: '', typ: '', kraj: '', krajeList: [] };
 
@@ -773,12 +818,15 @@ function onConfigChange() {
   const krajGroup      = document.getElementById('cfgKrajGroup');
   const krajEl         = document.getElementById('cfgKraj');
   const krajeMultiGroup = document.getElementById('cfgKrajeMultiGroup');
+  const mcrCombinedHelp = document.getElementById('mcrCombinedHelp');
 
   const isSingle   = typ === 'Krajský přebor';
   const isSloucene = typ === 'Sloučené krajské přebory';
+  const isMcrCombined = typ === 'MČR dorost/junioři – sloučené';
 
   krajGroup.style.display      = isSingle   ? '' : 'none';
   krajeMultiGroup.style.display = isSloucene ? '' : 'none';
+  mcrCombinedHelp.style.display = isMcrCombined ? '' : 'none';
   if (!isSingle) krajEl.value = '';
 
   const kraj      = isSingle   ? krajEl.value : '';
@@ -793,12 +841,20 @@ function onConfigChange() {
   competitionConfig = { nazev, typ, kraj, krajeList };
 
   const zone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  fileInput.multiple = isMcrCombined;
+  document.getElementById('uploadTitle').textContent = isMcrCombined
+    ? 'Nahrajte výsledkové soubory'
+    : 'Nahrajte soubor s výsledky';
+  document.getElementById('uploadHint').textContent = isMcrCombined
+    ? 'Vyberte nebo přetáhněte více .xlsx souborů: gigant, chůze a víceboje'
+    : 'Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr';
   if (valid) {
     zone.classList.remove('upload-disabled');
-    document.getElementById('fileInput').disabled = false;
+    fileInput.disabled = false;
   } else {
     zone.classList.add('upload-disabled');
-    document.getElementById('fileInput').disabled = true;
+    fileInput.disabled = true;
   }
 
   document.title = nazev ? nazev + ' · Bodování klubů' : 'Bodování klubů';
@@ -823,6 +879,7 @@ function showCompSummary() {
 let allResults = []; // {disc, gender, club, kraj, place, points, athlete}
 let allAthleteResults = []; // Full athlete-level data for Disciplíny tab
 let currentCat = 'all';
+let uploadedSources = [];
 
 // Clubs database state
 let clubsDatabase = [];
@@ -881,7 +938,14 @@ function isNonFinish(v) {
 
 // ─── CORE PROCESSING ────────────────────────────────────────────────────────
 
-function processFile(wb) {
+function processFile(wb, options = {}) {
+  const opts = {
+    append: false,
+    sourceLabel: '',
+    onlyDorostJunior: false,
+    combinedOnly: false,
+    ...options
+  };
   const ws = wb.Sheets[wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json(ws, {defval:null});
 
@@ -898,13 +962,16 @@ function processFile(wb) {
   //    Keep sedmiboj/pětiboj overall result rows (Body is null)
   //    Also exclude rows where Pořadí is "MS" (case-insensitive)
   const filtered = rows.filter(r => {
-    const body = r['Body'];
     // Filter out rows where Body is a real numeric value (combined-event sub-disciplines)
     // Must check body is not null/empty/whitespace first — Number(null)==0 and Number('')==0, both not NaN
-    if (body !== null && body !== undefined && String(body).trim() !== '' && !isNaN(Number(body))) return false;
+    if (rowBodyIsNumeric(r)) return false;
     // Exclude rows with MS in the Pořadí column at ingestion level
     const poradi = r['Pořadí'];
     if (poradi !== null && poradi !== undefined && String(poradi).trim().toUpperCase() === 'MS') return false;
+    const disc = String(r['Disciplína'] || '');
+    const category = extractCategory(disc);
+    if (opts.onlyDorostJunior && !MCR_DOROST_JUNIOR_CATS.has(category)) return false;
+    if (opts.combinedOnly && !COMBINED_EVENT_RE.test(disc)) return false;
     return true;
   });
 
@@ -914,12 +981,23 @@ function processFile(wb) {
   // Build unique discipline list
   const discSet = [...new Set(filtered.map(r => r['Disciplína']))].filter(Boolean);
 
-  allResults = [];
-  allAthleteResults = [];
+  if (!opts.append) {
+    allResults = [];
+    allAthleteResults = [];
+    uploadedSources = [];
+  }
+
+  if (opts.sourceLabel && !uploadedSources.includes(opts.sourceLabel)) {
+    uploadedSources.push(opts.sourceLabel);
+  }
 
   for (const disc of discSet) {
     const discRows = filtered.filter(r => r['Disciplína'] === disc);
     const { pointsResults, fullResults } = processDiscipine(disc, discRows);
+    if (opts.sourceLabel) {
+      pointsResults.forEach(r => { r.source = opts.sourceLabel; });
+      fullResults.forEach(r => { r.source = opts.sourceLabel; });
+    }
     // Mix relays (smíšené štafety) DO count toward the overall "Celkem" total and are
     // listed in the results, but they are not shown as a standalone category and are
     // excluded from the Muži/Ženy totals (handled in the category filter / export).
@@ -1434,6 +1512,9 @@ function renderMainTabContent() {
   if (currentCat.startsWith('sloucene-kraj-')) {
     const kraj = currentCat.slice('sloucene-kraj-'.length);
     base = allResults.filter(r => r.krajTab === kraj);
+  } else if (currentCat.startsWith('source:')) {
+    const source = currentCat.slice('source:'.length);
+    base = allResults.filter(r => r.source === source);
   } else {
     base = allResults;
   }
@@ -1469,6 +1550,10 @@ function buildTabs() {
   } else {
     // All other modes: Kraje tab (categories moved to dropdown)
     addTab('kraje', 'Kraje');
+  }
+
+  if (isMcrCombinedMode()) {
+    uploadedSources.forEach(source => addTab('source:' + source, source));
   }
 
   addTab('disciplines', 'Disciplíny');
@@ -2111,6 +2196,12 @@ function buildExportSections() {
     const cl = aggregate(applyGenderFilter(allResults, c));
     if (cl.length) sections.push({ label: c, clubs: cl });
   }
+  if (isMcrCombinedMode()) {
+    for (const source of uploadedSources) {
+      const cl = aggregate(allResults.filter(r => r.source === source));
+      if (cl.length) sections.push({ label: 'Zdroj - ' + source, clubs: cl });
+    }
+  }
   return sections;
 }
 
@@ -2235,40 +2326,113 @@ function exportFullPDF() {
 
 
 // ─── FILE HANDLING ───────────────────────────────────────────────────────────
-function handleFile(file) {
-  if (!file) return;
-  if (!file.name.match(/\.(xlsx|xls)$/i)) { showError('Nahrajte prosím soubor ve formátu .xlsx nebo .xls'); return; }
+function readWorkbookFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        resolve(XLSX.read(data, {type:'array'}));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error('Soubor se nepodařilo načíst.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
 
+function getWorkbookRows(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {defval:null});
+  return raw.map(r => {
+    const o = {};
+    for (const k of Object.keys(r)) o[k.trim()] = r[k];
+    return o;
+  });
+}
+
+function resetViewStateForNewUpload() {
+  selectedCategoryFilter = 'all';
+  currentCat = 'all';
+  disciplineSearchTerm = '';
+  selectedDiscipline = 'all';
+  selectedDisciplineGender = 'all';
+  selectedKrajDisc = 'all';
+  showKrajskePoradiDisc = false;
+  discSortCol = null;
+  discSortDir = 'asc';
+}
+
+function showProcessingStart() {
   document.getElementById('statusBox').style.display = 'block';
   document.getElementById('errorBox').style.display = 'none';
   document.getElementById('resultsSection').style.display = 'none';
   [1,2,3,4,5].forEach(n => setStatus(n,'pending'));
   setStatus(1,'active');
+}
 
+function finishProcessingRender() {
+  resetViewStateForNewUpload();
+  buildTabs();
+  renderCategoryFilter();
+  renderMainTabContent();
+  setStatus(5,'done');
   setTimeout(() => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        setStatus(1,'done');
-        const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, {type:'array'});
-        processFile(wb);
-        selectedCategoryFilter = 'all';
-        buildTabs();
-        renderCategoryFilter();
-        renderMainTabContent();
-        setStatus(5,'done');
-        setTimeout(() => {
-          showCompSummary();
-          document.getElementById('resultsSection').style.display = 'block';
-        }, 300);
-      } catch(err) {
-        console.error(err);
-        showError('Chyba při zpracování souboru: ' + err.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }, 100);
+    showCompSummary();
+    document.getElementById('resultsSection').style.display = 'block';
+  }, 300);
+}
+
+async function handleFiles(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  const invalid = files.find(file => !file.name.match(/\.(xlsx|xls)$/i));
+  if (invalid) { showError('Nahrajte prosím pouze soubory ve formátu .xlsx nebo .xls'); return; }
+
+  showProcessingStart();
+
+  try {
+    if (!isMcrCombinedMode()) {
+      if (files.length > 1) { showError('Pro tento typ závodu nahrajte jen jeden soubor.'); return; }
+      const wb = await readWorkbookFromFile(files[0]);
+      setStatus(1,'done');
+      processFile(wb);
+      finishProcessingRender();
+      return;
+    }
+
+    allResults = [];
+    allAthleteResults = [];
+    uploadedSources = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const wb = await readWorkbookFromFile(file);
+      const rows = getWorkbookRows(wb);
+      const sourceLabel = sourceLabelFromFileName(file.name, i);
+      processFile(wb, {
+        append: true,
+        sourceLabel,
+        onlyDorostJunior: true,
+        combinedOnly: isCombinedEventsWorkbook(rows, file.name)
+      });
+    }
+
+    setStatus(1,'done');
+    if (!allResults.length) {
+      showError('V nahraných souborech nebyla nalezena bodovaná umístění pro dorost/juniory.');
+      return;
+    }
+    finishProcessingRender();
+  } catch(err) {
+    console.error(err);
+    showError('Chyba při zpracování souboru: ' + err.message);
+  }
+}
+
+function handleFile(file) {
+  handleFiles(file ? [file] : []);
 }
 
 // ─── INIT APP ───────────────────────────────────────────────────────────────
@@ -2277,12 +2441,12 @@ function handleFile(file) {
   await loadKasMapFromCsv();
   await loadClubsDatabase();
   
-  document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+  document.getElementById('fileInput').addEventListener('change', e => handleFiles(e.target.files));
 
   const zone = document.getElementById('uploadZone');
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
 })();
 </script>
 </body>
