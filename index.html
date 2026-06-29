@@ -1060,10 +1060,10 @@ function processDiscipine(disc, rows) {
     // Relay / events with only Běh phases → rank by time across all heats
     finalAthletes = buildBehRanking(rows);
   } else if (hasFinal) {
-    // A-final places come from the official Pořadí. When fewer than 8 athletes
-    // placed in the A-final, the remaining scoring positions (7., 8., …) are filled:
-    //   • from the B-final (then C-final, …) in finished order, if a B-final was run;
-    //   • otherwise from the fastest heat (rozběh) times.
+    // A-final places come from the official Pořadí. DNS/DNF/DQ athletes in
+    // the final do not score, and their final slots are not back-filled from
+    // heats. Only genuinely empty A-final slots can be filled from lower finals
+    // or heats.
     const finalRows = rows.filter(r => getPhaseType(r['Fáze']) === 'final');
     const heatRows = rows.filter(r => getPhaseType(r['Fáze']) === 'heat');
 
@@ -1076,9 +1076,11 @@ function processDiscipine(disc, rows) {
       nonFinish: isNonFinish(r['Výkon']),
     }));
 
-    // Valid A-final placements only (exclude DNS/DQ/DNF)
+    // Valid A-final placements only (exclude DNS/DQ/DNF). Back-fill only when
+    // the A-final itself had fewer than 8 rows; non-finishers keep their slot.
     const aFinalValid = fa.filter(a => a.place !== null && !a.nonFinish);
-    const needed = 8 - aFinalValid.length;
+    const occupiedAFinalSlots = finalRows.length;
+    const needed = Math.max(0, 8 - occupiedAFinalSlots);
 
     if (needed > 0) {
       const maxAplace = aFinalValid.length > 0 ? Math.max(...aFinalValid.map(a => a.place)) : 0;
