@@ -60,6 +60,7 @@ Only top-8 placements score. Equal placements share averaged points.
 ### Non-scoring codes
 
 DNS, DQ, DNF, MS, DQ*, NM, NH, PS are excluded from ranking.
+Exception: in A-finals (`Finále`/`Finále A`), DNS/DQ/DNF athletes made the final and still score — they share the places after the last finisher, splitting those places' points evenly when there is more than one.
 
 ### Tabs Generated
 

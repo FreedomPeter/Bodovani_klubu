@@ -1061,8 +1061,10 @@ function processDiscipine(disc, rows) {
     finalAthletes = buildBehRanking(rows);
   } else if (hasFinal) {
     // A-final places come from the official Pořadí. DNS/DNF/DQ athletes in
-    // the final do not score, and final standings are never back-filled from
-    // heats. Only genuinely empty A-final slots can be filled from lower finals.
+    // the final made the final, so they still score: they share the places
+    // after the last valid finisher (points split evenly via tie-averaging).
+    // Final standings are never back-filled from heats; only genuinely empty
+    // A-final slots can be filled from lower finals.
     const finalRows = rows.filter(r => getPhaseType(r['Fáze']) === 'final');
 
     // Build final athletes with their places
@@ -1074,15 +1076,26 @@ function processDiscipine(disc, rows) {
       nonFinish: isNonFinish(r['Výkon']),
     }));
 
-    // Valid A-final placements only (exclude DNS/DQ/DNF). Back-fill only when
-    // the A-final itself had fewer than 8 rows; non-finishers keep their slot.
+    // Valid A-final placements (athletes who finished with an official place)
     const aFinalValid = fa.filter(a => a.place !== null && !a.nonFinish);
+    const maxAplace = aFinalValid.length > 0 ? Math.max(...aFinalValid.map(a => a.place)) : 0;
+
+    // Non-finishers all get the same place right after the last finisher, so
+    // the tie-averaging in assignPointsToAthletes splits the remaining points
+    // evenly between them (e.g. two DNF in a full final share places 7+8).
+    const aFinalNonFinishers = fa.filter(a => a.nonFinish);
+    for (const nf of aFinalNonFinishers) {
+      nf.place = maxAplace + 1;
+      nf.nonFinish = false;
+    }
+
+    // Back-fill only when the A-final itself had fewer than 8 rows;
+    // non-finishers keep their slot.
     const occupiedAFinalSlots = finalRows.length;
     const needed = Math.max(0, 8 - occupiedAFinalSlots);
 
     if (needed > 0) {
-      const maxAplace = aFinalValid.length > 0 ? Math.max(...aFinalValid.map(a => a.place)) : 0;
-      let nextPlace = maxAplace + 1;
+      let nextPlace = maxAplace + aFinalNonFinishers.length + 1;
 
       // Collect B/C/… final finishers, ordered by final letter (B before C…) then placement
       const lowerFinals = rows
