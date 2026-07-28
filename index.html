@@ -510,6 +510,7 @@ footer { text-align: center; padding: 32px; color: var(--muted); font-size: 0.78
           <option value="">— vyberte typ —</option>
           <option value="Mistrovství ČR">Mistrovství ČR</option>
           <option value="MČR dorost/junioři – sloučené">MČR dorost/junioři – sloučené</option>
+          <option value="MČR mužů a žen – sloučené">MČR mužů a žen – sloučené</option>
           <option value="Krajský přebor">Krajský přebor</option>
           <option value="Sloučené krajské přebory">Sloučené krajské přebory</option>
         </select>
@@ -764,6 +765,7 @@ const FEMALE_CATS = new Set([
   'Atletická přípravka-dívky','Atletická minipřípravka-dívky'
 ]);
 const MCR_DOROST_JUNIOR_CATS = new Set(['Dorostenci','Dorostenky','Junioři','Juniorky']);
+const MCR_MUZI_ZENY_CATS = new Set(['Muži','Ženy']);
 const COMBINED_EVENT_RE = /^(desetiboj|sedmiboj|pětiboj|petiboj|devítiboj|devitiboj)\b/i;
 
 // Apply the selected category filter to a results array.
@@ -777,6 +779,9 @@ function applyGenderFilter(results, filter) {
 
 function extractCategory(disc) {
   const d = disc.toLowerCase();
+  // "Muži 20-22 let" / "Ženy 20-22 let" are U23 sub-rankings duplicated from the
+  // main race results — classify as U23 so they never double-count as Muži/Ženy
+  if (/20\s*-\s*22/.test(d)) return d.includes('žen') ? 'U23 ženy' : 'U23 muži';
   for (const cat of CATEGORY_MATCH_ORDER) {
     if (d.includes(cat.toLowerCase())) return cat;
   }
@@ -784,7 +789,15 @@ function extractCategory(disc) {
 }
 
 function isMcrCombinedMode() {
-  return competitionConfig.typ === 'MČR dorost/junioři – sloučené';
+  return competitionConfig.typ === 'MČR dorost/junioři – sloučené'
+      || competitionConfig.typ === 'MČR mužů a žen – sloučené';
+}
+
+// Categories counted in the active sloučené MČR mode (null = no restriction)
+function mcrCombinedTargetCats() {
+  if (competitionConfig.typ === 'MČR dorost/junioři – sloučené') return MCR_DOROST_JUNIOR_CATS;
+  if (competitionConfig.typ === 'MČR mužů a žen – sloučené') return MCR_MUZI_ZENY_CATS;
+  return null;
 }
 
 function sourceLabelFromFileName(name, index = 0) {
@@ -822,11 +835,17 @@ function onConfigChange() {
 
   const isSingle   = typ === 'Krajský přebor';
   const isSloucene = typ === 'Sloučené krajské přebory';
-  const isMcrCombined = typ === 'MČR dorost/junioři – sloučené';
+  const isMcrCombined = typ === 'MČR dorost/junioři – sloučené' || typ === 'MČR mužů a žen – sloučené';
 
   krajGroup.style.display      = isSingle   ? '' : 'none';
   krajeMultiGroup.style.display = isSloucene ? '' : 'none';
   mcrCombinedHelp.style.display = isMcrCombined ? '' : 'none';
+  if (isMcrCombined) {
+    const catsLabel = typ === 'MČR mužů a žen – sloučené'
+      ? 'muži/ženy'
+      : 'dorostenci/dorostenky/junioři/juniorky';
+    mcrCombinedHelp.innerHTML = '<strong>Režim pro sloučené MČR:</strong> nahrajte více výsledkových XLSX souborů najednou. Appka započítá jen kategorie ' + catsLabel + ' a u souboru s víceboji jen celkové řádky vícebojů.';
+  }
   if (!isSingle) krajEl.value = '';
 
   const kraj      = isSingle   ? krajEl.value : '';
@@ -942,7 +961,7 @@ function processFile(wb, options = {}) {
   const opts = {
     append: false,
     sourceLabel: '',
-    onlyDorostJunior: false,
+    onlyCategories: null, // Set of category names to keep (sloučené MČR modes)
     combinedOnly: false,
     ...options
   };
@@ -970,7 +989,7 @@ function processFile(wb, options = {}) {
     if (poradi !== null && poradi !== undefined && String(poradi).trim().toUpperCase() === 'MS') return false;
     const disc = String(r['Disciplína'] || '');
     const category = extractCategory(disc);
-    if (opts.onlyDorostJunior && !MCR_DOROST_JUNIOR_CATS.has(category)) return false;
+    if (opts.onlyCategories && !opts.onlyCategories.has(category)) return false;
     if (opts.combinedOnly && !COMBINED_EVENT_RE.test(disc)) return false;
     return true;
   });
@@ -2405,14 +2424,14 @@ async function handleFiles(fileList) {
       processFile(wb, {
         append: true,
         sourceLabel,
-        onlyDorostJunior: true,
+        onlyCategories: mcrCombinedTargetCats(),
         combinedOnly: isCombinedEventsWorkbook(rows, file.name)
       });
     }
 
     setStatus(1,'done');
     if (!allResults.length) {
-      showError('V nahraných souborech nebyla nalezena bodovaná umístění pro dorost/juniory.');
+      showError('V nahraných souborech nebyla nalezena bodovaná umístění pro zvolené kategorie.');
       return;
     }
     finishProcessingRender();
