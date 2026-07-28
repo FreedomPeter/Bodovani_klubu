@@ -748,7 +748,7 @@ const PLACE_POINTS = {1:8,2:7,3:6,4:5,5:4,6:3,7:2,8:1};
 const CATEGORY_ORDER = [
   'Muži','Ženy','U23 muži','U23 ženy','Junioři','Juniorky',
   'Dorostenci','Dorostenky','Žáci','Žákyně','Ml. žáci','Ml. žákyně',
-  'Mix U18','Mix U16','Mix',
+  'Mix U20','Mix U18','Mix U16','Mix',
   'Atletická přípravka-hoši','Atletická přípravka-dívky',
   'Atletická minipřípravka-hoši','Atletická minipřípravka-dívky'
 ];
@@ -765,7 +765,9 @@ const FEMALE_CATS = new Set([
   'Atletická přípravka-dívky','Atletická minipřípravka-dívky'
 ]);
 const MCR_DOROST_JUNIOR_CATS = new Set(['Dorostenci','Dorostenky','Junioři','Juniorky']);
-const MCR_MUZI_ZENY_CATS = new Set(['Muži','Ženy']);
+// 'Mix' = senior club mixed relays (e.g. "4 x 100 m Mix SEN") — count in Celkem
+// only, not in Muži/Ženy. Youth mix relays (Mix U18/U20) are excluded.
+const MCR_MUZI_ZENY_CATS = new Set(['Muži','Ženy','Mix']);
 const COMBINED_EVENT_RE = /^(desetiboj|sedmiboj|pětiboj|petiboj|devítiboj|devitiboj)\b/i;
 
 // Apply the selected category filter to a results array.
@@ -842,7 +844,7 @@ function onConfigChange() {
   mcrCombinedHelp.style.display = isMcrCombined ? '' : 'none';
   if (isMcrCombined) {
     const catsLabel = typ === 'MČR mužů a žen – sloučené'
-      ? 'muži/ženy'
+      ? 'muži/ženy a seniorské mix štafety'
       : 'dorostenci/dorostenky/junioři/juniorky';
     mcrCombinedHelp.innerHTML = '<strong>Režim pro sloučené MČR:</strong> nahrajte více výsledkových XLSX souborů najednou. Appka započítá jen kategorie ' + catsLabel + ' a u souboru s víceboji jen celkové řádky vícebojů.';
   }
@@ -866,7 +868,9 @@ function onConfigChange() {
     ? 'Nahrajte výsledkové soubory'
     : 'Nahrajte soubor s výsledky';
   document.getElementById('uploadHint').textContent = isMcrCombined
-    ? 'Vyberte nebo přetáhněte více .xlsx souborů: gigant, chůze a víceboje'
+    ? (typ === 'MČR mužů a žen – sloučené'
+        ? 'Vyberte nebo přetáhněte více .xlsx souborů: hlavní závod, chůze, víceboje a štafety'
+        : 'Vyberte nebo přetáhněte více .xlsx souborů: gigant, chůze a víceboje')
     : 'Přetáhněte .xlsx soubor z atletika.cz nebo klikněte pro výběr';
   if (valid) {
     zone.classList.remove('upload-disabled');
